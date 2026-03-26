@@ -1,6 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TripYojana 🌍
+
+A comprehensive travel planning application built with Next.js, TypeScript, and Tailwind CSS.
+
+## Features
+
+- 🔐 **Authentication** - Login/signup with validation
+- 📋 **Dashboard** - View and manage all your trips
+- ✈️ **Trip Creation** - Multi-step form for creating trips
+- 📅 **Itinerary Planner** - Drag-and-drop itinerary builder
+- 🗺️ **Map View** - Interactive Mapbox integration with markers and routes
+- 💰 **Budget Tracking** - Track expenses by category
+- 👥 **Group Expenses** - Split expenses and calculate settlements
 
 ## Getting Started
+
+### Prerequisites
+
+- Node.js 18+ 
+- pnpm (recommended)
+
+### Installation
+
+1. Clone the repository
+2. Install dependencies:
+
+```bash
+pnpm install
+```
+
+3. Set up environment variables:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Edit `.env.local` and add your Mapbox access token:
+- Get a free token at [https://account.mapbox.com/](https://account.mapbox.com/)
+- Add it as `NEXT_PUBLIC_MAPBOX_TOKEN=your_token_here`
+
+### Running the Development Server
 
 First, run the development server:
 
