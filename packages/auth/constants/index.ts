@@ -1,6 +1,7 @@
 export const AUTH_LABELS = {
   LOGIN_TITLE: "Login",
   SIGNUP_TITLE: "Create Account",
+  NAME_LABEL: "Full Name",
   EMAIL_LABEL: "Email",
   PASSWORD_LABEL: "Password",
   CONFIRM_PASSWORD_LABEL: "Confirm Password",
@@ -8,6 +9,7 @@ export const AUTH_LABELS = {
   SIGN_UP_BUTTON: "Sign up",
   DONT_HAVE_ACCOUNT: "Don't have an account?",
   ALREADY_HAVE_ACCOUNT: "Already have an account?",
+  NAME_PLACEHOLDER: "Enter your full name",
   EMAIL_PLACEHOLDER: "name@example.com",
   PASSWORD_PLACEHOLDER: "••••••••",
   TAGLINE: "Travel Planning Made Easy",
@@ -16,6 +18,8 @@ export const AUTH_LABELS = {
 } as const;
 
 export const AUTH_MESSAGES = {
+  NAME_REQUIRED: "Name is required",
+  NAME_MIN_LENGTH: "Name must be at least 2 characters",
   EMAIL_REQUIRED: "Email is required",
   EMAIL_INVALID: "Please enter a valid email address",
   PASSWORD_REQUIRED: "Password is required",

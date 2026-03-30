@@ -1,5 +1,4 @@
 import { TRIP_MESSAGES } from "@/packages/constants/trip";
-import { TripFormData } from "@/types/trip";
 
 export const validateTripDestination = (destination: string): string | undefined => {
   if (!destination) {

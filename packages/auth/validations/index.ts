@@ -1,5 +1,15 @@
 import { AUTH_VALIDATION, AUTH_MESSAGES } from "../constants";
 
+export const validateName = (name: string): string | undefined => {
+  if (!name || !name.trim()) {
+    return AUTH_MESSAGES.NAME_REQUIRED;
+  }
+  if (name.trim().length < 2) {
+    return AUTH_MESSAGES.NAME_MIN_LENGTH;
+  }
+  return undefined;
+};
+
 export const validateEmail = (email: string): string | undefined => {
   if (!email) {
     return AUTH_MESSAGES.EMAIL_REQUIRED;

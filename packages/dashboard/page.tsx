@@ -12,23 +12,91 @@ import { SmartGreeting } from "@/packages/components/dashboard/SmartGreeting";
 import { motion } from "framer-motion";
 import { TripCardSkeleton } from "@/packages/components/ui/skeleton";
 import { toast } from "sonner";
+import { useAuth } from "@/packages/hooks/useAuth";
+import AuthLoading from "@/packages/components/auth/AuthLoading";
 import { Trip } from "./types";
-import { DASHBOARD_LABELS, DUMMY_TRIPS } from "./constants";
+import { DASHBOARD_LABELS } from "./constants";
 import { formatDate, formatCurrency } from "./helpers";
 
+type ApiTrip = {
+  _id: string;
+  title: string;
+  budget: number;
+  startDate: string;
+  endDate: string;
+  places?: string[];
+};
+
+function mapApiTripToDashboardTrip(trip: ApiTrip): Trip {
+  return {
+    id: String(trip._id),
+    destination: trip.places?.[0] || trip.title,
+    startDate: trip.startDate,
+    endDate: trip.endDate,
+    budget: Number(trip.budget || 0),
+    currency: "INR",
+  };
+}
+
 export default function DashboardPage() {
-  const [trips] = useState<Trip[]>(DUMMY_TRIPS);
+  // Client-side authentication protection
+  const { status, user } = useAuth();
+  
+  const [trips, setTrips] = useState<Trip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    // Simulate loading data
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 800);
+    let isMounted = true;
 
-    return () => clearTimeout(timer);
-  }, []);
+    const loadTrips = async () => {
+      // Only load trips if authenticated
+      if (status !== "authenticated") {
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/trips", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          toast.error(data?.message || "Failed to load trips");
+          if (isMounted) {
+            setTrips([]);
+          }
+          return;
+        }
+
+        if (isMounted) {
+          const apiTrips = Array.isArray(data?.trips) ? (data.trips as ApiTrip[]) : [];
+          setTrips(apiTrips.map(mapApiTripToDashboardTrip));
+        }
+      } catch (error) {
+        console.error("Dashboard trips load error:", error);
+        toast.error("Could not load trips");
+        if (isMounted) {
+          setTrips([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadTrips();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [status]);
 
   const handleTripClick = (tripName: string) => {
     toast.success(`Opening ${tripName}`, {
@@ -73,6 +141,16 @@ export default function DashboardPage() {
     }
   };
 
+  // Show loading state while checking authentication
+  if (status === "loading") {
+    return <AuthLoading message="Verifying your session..." />;
+  }
+
+  // Don't render content if not authenticated (will redirect via useAuth)
+  if (status !== "authenticated") {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       <Navbar />
@@ -82,7 +160,7 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           {/* Smart Personalized Greeting */}
           <SmartGreeting
-            userName="Sumit"
+            userName={user?.name || "User"}
             upcomingTripsCount={upcomingTrips}
             totalTrips={totalTrips}
             hasRecentActivity={!isLoading && trips.length > 0}

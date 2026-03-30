@@ -4,15 +4,22 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Navbar from "@/packages/components/shared/Navbar";
-import { TripFilter } from "@/packages/components/shared/TripFilter";
+import { TripFilter, type TripOption } from "@/packages/components/shared/TripFilter";
 import { PlacesList, SelectedPlaceOverlay } from "./components";
 import { useMapData } from "./hooks";
 import { TRIP_PLACES } from "@/packages/constants/tripData";
-import { DUMMY_TRIPS } from "@/packages/dashboard/constants";
+import type { Place } from "./types";
+import { toast } from "sonner";
+
+type ApiTrip = {
+  _id: string;
+  title: string;
+  places?: string[];
+};
 
 // Dynamic import for map component (client-side only)
 const MapComponent = dynamic(
-  () => import("./components").then((mod) => ({ default: mod.MapComponent })),
+  () => import("./components/MapComponent"),
   {
     ssr: false,
     loading: () => (
@@ -29,13 +36,10 @@ const MapComponent = dynamic(
 export default function MapPage() {
   const searchParams = useSearchParams();
   const destination = searchParams.get("destination");
-  
-  // Find trip ID from destination or default to first trip
-  const defaultTripId = destination 
-    ? DUMMY_TRIPS.find(t => destination.toLowerCase().includes(t.destination.toLowerCase()))?.id || "1"
-    : "1";
-  
-  const [selectedTripId, setSelectedTripId] = useState(defaultTripId);
+
+  const [trips, setTrips] = useState<TripOption[]>([]);
+  const [isTripsLoading, setIsTripsLoading] = useState(true);
+  const [selectedTripId, setSelectedTripId] = useState("");
   
   const {
     places,
@@ -44,8 +48,88 @@ export default function MapPage() {
     removePlace,
   } = useMapData();
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTrips = async () => {
+      try {
+        const response = await fetch("/api/trips", { cache: "no-store" });
+        const data = await response.json();
+
+        if (!response.ok) {
+          toast.error(data?.message || "Failed to load trips for map");
+          if (isMounted) {
+            setTrips([]);
+          }
+          return;
+        }
+
+        const apiTrips = Array.isArray(data?.trips) ? (data.trips as ApiTrip[]) : [];
+        const mappedTrips: TripOption[] = apiTrips.map((trip) => ({
+          id: String(trip._id),
+          destination: trip.places?.[0] || trip.title,
+        }));
+
+        if (!isMounted) {
+          return;
+        }
+
+        setTrips(mappedTrips);
+
+        if (mappedTrips.length === 0) {
+          setSelectedTripId("");
+          return;
+        }
+
+        if (destination) {
+          const destinationLower = destination.toLowerCase();
+          const matchedTrip = mappedTrips.find((trip) =>
+            destinationLower.includes(trip.destination.toLowerCase())
+          );
+          setSelectedTripId(matchedTrip?.id || mappedTrips[0].id);
+        } else {
+          setSelectedTripId(mappedTrips[0].id);
+        }
+      } catch (error) {
+        console.error("Map trips load error:", error);
+        toast.error("Could not load trips");
+        if (isMounted) {
+          setTrips([]);
+          setSelectedTripId("");
+        }
+      } finally {
+        if (isMounted) {
+          setIsTripsLoading(false);
+        }
+      }
+    };
+
+    loadTrips();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [destination]);
+
+  const selectedTrip = trips.find((trip) => trip.id === selectedTripId);
+
+  const fallbackTripPlaces: Place[] = selectedTrip
+    ? [
+        {
+          id: selectedTrip.id,
+          name: selectedTrip.destination,
+          description: "Newly created trip destination",
+          lat: 20.5937,
+          lng: 78.9629,
+          category: "attraction",
+          time: "Anytime",
+          address: selectedTrip.destination,
+        },
+      ]
+    : places;
+
   // Get places for selected trip
-  const tripPlaces = TRIP_PLACES[selectedTripId] || places;
+  const tripPlaces = TRIP_PLACES[selectedTripId] || fallbackTripPlaces;
   
   // Auto-select place when destination is provided
   useEffect(() => {
@@ -72,6 +156,8 @@ export default function MapPage() {
             <TripFilter 
               selectedTripId={selectedTripId} 
               onTripChange={setSelectedTripId} 
+              trips={trips}
+              isLoading={isTripsLoading}
               className="w-full"
             />
           </div>

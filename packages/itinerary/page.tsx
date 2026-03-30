@@ -1,720 +1,1103 @@
 "use client";
 
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ComponentType } from "react";
+import dynamic from "next/dynamic";
 import Navbar from "@/packages/components/shared/Navbar";
-import { Card, CardContent } from "@/packages/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/packages/components/ui/card";
 import { Button } from "@/packages/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/packages/components/ui/tabs";
+import { Input } from "@/packages/components/ui/input";
+import { Label } from "@/packages/components/ui/label";
+import { Checkbox } from "@/packages/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/packages/components/ui/select";
 import { Badge } from "@/packages/components/ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "@/packages/components/ui/popover";
 import { cn } from "@/packages/lib/utils";
 import { toast } from "@/packages/lib/toast";
-import { TRIP_ITINERARIES } from "@/packages/constants/tripItineraries";
+import type { Place } from "@/packages/map/types";
+
+type ItineraryMapProps = {
+  places: Place[];
+  focusPlace?: string | null;
+};
+
+type Interest = "temple" | "nature" | "food";
+type SlotName = "morning" | "afternoon" | "evening";
+
+type ApiTrip = {
+  _id: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  places?: string[];
+};
+
+type TripOption = {
+  id: string;
+  title: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+};
+
+type PlaceCandidate = {
+  id: string;
+  name: string;
+  location: string;
+  notes: string;
+  interests: Interest[];
+  area: string;
+  durationMin: number;
+  bestSlot: SlotName;
+};
+
+type SlotPlan = {
+  id: string;
+  slot: SlotName;
+  time: string;
+  name: string;
+  location: string;
+  notes: string;
+  area: string;
+  durationMin: number;
+  lat: number;
+  lng: number;
+  distanceFromPreviousKm: number;
+  travelTimeMinFromPrevious: number;
+};
+
+type DayPlan = {
+  dayNumber: number;
+  slots: SlotPlan[];
+  estimatedTravelMin: number;
+  estimatedDistanceKm: number;
+  totalPlannedMin: number;
+  warnings: string[];
+};
+
+const SLOT_ORDER: SlotName[] = ["morning", "afternoon", "evening"];
+
+const AREA_COORDS: Record<string, [number, number]> = {
+  north: [28.7041, 77.1025],
+  south: [12.9716, 77.5946],
+  east: [22.5726, 88.3639],
+  west: [19.076, 72.8777],
+  central: [23.2599, 77.4126],
+  custom: [20.5937, 78.9629],
+};
+
+const ItineraryMap = dynamic<ItineraryMapProps>(
+  () =>
+    (import("../map/components/MapComponent") as Promise<Record<string, unknown>>).then(
+      (mod) =>
+        ((mod.default || mod.MapComponent) as ComponentType<ItineraryMapProps>)
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-130 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-100 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+        Loading map...
+      </div>
+    ),
+  }
+);
+
+const SLOT_TIMES: Record<SlotName, string> = {
+  morning: "09:00 AM",
+  afternoon: "02:00 PM",
+  evening: "06:30 PM",
+};
+
+const INTEREST_OPTIONS: { value: Interest; label: string }[] = [
+  { value: "temple", label: "Temple" },
+  { value: "nature", label: "Nature" },
+  { value: "food", label: "Food" },
+];
+
+const PLACE_LIBRARY: PlaceCandidate[] = [
+  {
+    id: "p1",
+    name: "Old City Heritage Walk",
+    location: "Historic Quarter",
+    notes: "Great for architecture photos and local stories.",
+    interests: ["temple", "nature"],
+    area: "central",
+    durationMin: 120,
+    bestSlot: "morning",
+  },
+  {
+    id: "p2",
+    name: "Museum and Art Gallery",
+    location: "Museum District",
+    notes: "Book tickets online to skip queues.",
+    interests: ["temple", "nature"],
+    area: "central",
+    durationMin: 150,
+    bestSlot: "afternoon",
+  },
+  {
+    id: "p3",
+    name: "City Viewpoint",
+    location: "Hill Top",
+    notes: "Best around golden hour.",
+    interests: ["nature"],
+    area: "north",
+    durationMin: 90,
+    bestSlot: "evening",
+  },
+  {
+    id: "p4",
+    name: "Street Food Trail",
+    location: "Market Street",
+    notes: "Try 3-4 signature dishes.",
+    interests: ["food"],
+    area: "central",
+    durationMin: 120,
+    bestSlot: "evening",
+  },
+  {
+    id: "p5",
+    name: "Botanical Garden",
+    location: "Garden Zone",
+    notes: "Relaxing walk and shaded pathways.",
+    interests: ["nature"],
+    area: "east",
+    durationMin: 100,
+    bestSlot: "morning",
+  },
+  {
+    id: "p6",
+    name: "Adventure Activity Park",
+    location: "Outskirts",
+    notes: "Keep hydration and spare clothes.",
+    interests: ["nature"],
+    area: "west",
+    durationMin: 180,
+    bestSlot: "afternoon",
+  },
+  {
+    id: "p7",
+    name: "Local Handicraft Market",
+    location: "Bazaar Road",
+    notes: "Bargain politely for better prices.",
+    interests: ["food", "temple"],
+    area: "south",
+    durationMin: 110,
+    bestSlot: "afternoon",
+  },
+  {
+    id: "p8",
+    name: "Riverfront Walk",
+    location: "River Promenade",
+    notes: "Ideal for sunset views.",
+    interests: ["nature", "food"],
+    area: "east",
+    durationMin: 90,
+    bestSlot: "evening",
+  },
+  {
+    id: "p9",
+    name: "Historic Fort Complex",
+    location: "Fort Area",
+    notes: "Carry light walking shoes.",
+    interests: ["temple", "nature"],
+    area: "north",
+    durationMin: 160,
+    bestSlot: "morning",
+  },
+  {
+    id: "p10",
+    name: "Temple Circuit",
+    location: "Sacred Zone",
+    notes: "Respect local customs and dress code.",
+    interests: ["temple"],
+    area: "south",
+    durationMin: 130,
+    bestSlot: "morning",
+  },
+  {
+    id: "p11",
+    name: "Cafe and Bakery Crawl",
+    location: "Downtown",
+    notes: "Perfect slow-paced break between attractions.",
+    interests: ["food"],
+    area: "central",
+    durationMin: 100,
+    bestSlot: "afternoon",
+  },
+  {
+    id: "p12",
+    name: "Night Cultural Show",
+    location: "Performance Center",
+    notes: "Reserve seats in advance.",
+    interests: ["temple", "food"],
+    area: "central",
+    durationMin: 120,
+    bestSlot: "evening",
+  },
+];
+
+function dayDiffInclusive(startDate: string, endDate: string) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return 1;
+  }
+  return Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+}
+
+function hashToOffset(seed: string) {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
+    hash |= 0;
+  }
+  return (Math.abs(hash) % 1000) / 1000;
+}
+
+function resolveLatLng(area: string, seed: string, dayNumber: number, slotIndex: number): { lat: number; lng: number } {
+  const base = AREA_COORDS[area] || AREA_COORDS.custom;
+  const seedOffset = hashToOffset(seed);
+  const dayOffset = dayNumber * 0.03;
+  const slotOffset = slotIndex * 0.015;
+
+  return {
+    lat: base[0] + seedOffset * 0.12 + dayOffset,
+    lng: base[1] + seedOffset * 0.14 + slotOffset,
+  };
+}
+
+function buildFallbackPlace(destination: string, interest: Interest, index: number): PlaceCandidate {
+  return {
+    id: `fallback-${interest}-${index}`,
+    name: `${interest[0].toUpperCase() + interest.slice(1)} Experience`,
+    location: destination || "City Center",
+    notes: `Explore a ${interest} spot in ${destination || "the destination"}.`,
+    interests: [interest],
+    area: ["central", "north", "east", "south", "west"][index % 5],
+    durationMin: 90,
+    bestSlot: SLOT_ORDER[index % SLOT_ORDER.length],
+  };
+}
+
+function scoreCandidate(candidate: PlaceCandidate, interests: Interest[], slot: SlotName, previousArea: string | null) {
+  const interestMatches = candidate.interests.filter((value) => interests.includes(value)).length;
+  const slotScore = candidate.bestSlot === slot ? 3 : 0;
+  const commuteScore = previousArea && candidate.area === previousArea ? 2 : 0;
+  return interestMatches * 5 + slotScore + commuteScore;
+}
+
+function haversineDistanceKm(start: [number, number], end: [number, number]) {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+
+  const latDelta = toRad(end[0] - start[0]);
+  const lngDelta = toRad(end[1] - start[1]);
+  const lat1 = toRad(start[0]);
+  const lat2 = toRad(end[0]);
+
+  const a =
+    Math.sin(latDelta / 2) * Math.sin(latDelta / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(lngDelta / 2) * Math.sin(lngDelta / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return earthRadiusKm * c;
+}
+
+function estimateTravelTimeMin(distanceKm: number) {
+  const avgCitySpeedKmh = 24;
+  const bufferMin = 8;
+  return Math.max(0, Math.round((distanceKm / avgCitySpeedKmh) * 60 + bufferMin));
+}
+
+function generateItinerary(destination: string, days: number, interests: Interest[]): DayPlan[] {
+  const totalSlots = days * SLOT_ORDER.length;
+  const MAX_PLACES_PER_DAY = SLOT_ORDER.length;
+  const OVERLOAD_LIMIT_MIN = 8 * 60;
+  const effectiveInterests: Interest[] =
+    interests.length > 0 ? interests : (["temple", "nature", "food"] as Interest[]);
+
+  const ranked = PLACE_LIBRARY
+    .map((place) => {
+      const matches = place.interests.filter((interest) => effectiveInterests.includes(interest)).length;
+      return { place, rank: matches * 10 + (place.bestSlot === "morning" ? 1 : 0) };
+    })
+    .sort((a, b) => b.rank - a.rank)
+    .map((entry) => entry.place);
+
+  const selectedPool: PlaceCandidate[] = [...ranked];
+  let fallbackCounter = 1;
+
+  while (selectedPool.length < totalSlots) {
+    const fallbackInterest = effectiveInterests[(fallbackCounter - 1) % effectiveInterests.length];
+    selectedPool.push(buildFallbackPlace(destination, fallbackInterest, fallbackCounter));
+    fallbackCounter += 1;
+  }
+
+  const remaining = selectedPool.slice(0, totalSlots);
+  const output: DayPlan[] = [];
+
+  for (let day = 1; day <= days; day += 1) {
+    const slots: SlotPlan[] = [];
+    let previousArea: string | null = null;
+    let previousCoords: [number, number] | null = null;
+    let totalDistanceKm = 0;
+    let totalTravelMin = 0;
+
+    SLOT_ORDER.forEach((slotName, slotIndex) => {
+      const rankedCandidates = remaining
+        .map((candidate, index) => {
+          const coords = resolveLatLng(candidate.area, candidate.name, day, slotIndex);
+          const distanceKm = previousCoords
+            ? haversineDistanceKm(previousCoords, [coords.lat, coords.lng])
+            : 0;
+          const score = scoreCandidate(candidate, effectiveInterests, slotName, previousArea);
+          return { candidate, index, score, distanceKm };
+        })
+        .sort((a, b) => {
+          if (b.score !== a.score) {
+            return b.score - a.score;
+          }
+          return a.distanceKm - b.distanceKm;
+        });
+
+      const picked = rankedCandidates[0];
+      const selected = picked
+        ? remaining.splice(picked.index, 1)[0]
+        : buildFallbackPlace(destination, effectiveInterests[0], day * 10 + slotIndex);
+      previousArea = selected.area;
+      const coords = resolveLatLng(selected.area, selected.name, day, slotIndex);
+      const distanceFromPreviousKm = previousCoords
+        ? haversineDistanceKm(previousCoords, [coords.lat, coords.lng])
+        : 0;
+      const travelTimeMinFromPrevious = slotIndex === 0 ? 0 : estimateTravelTimeMin(distanceFromPreviousKm);
+
+      totalDistanceKm += distanceFromPreviousKm;
+      totalTravelMin += travelTimeMinFromPrevious;
+      previousCoords = [coords.lat, coords.lng];
+
+      slots.push({
+        id: `${day}-${slotName}-${selected.id}`,
+        slot: slotName,
+        time: SLOT_TIMES[slotName],
+        name: selected.name,
+        location: selected.location.includes(destination) || !destination
+          ? selected.location
+          : `${selected.location}, ${destination}`,
+        notes: selected.notes,
+        area: selected.area,
+        durationMin: selected.durationMin,
+        lat: coords.lat,
+        lng: coords.lng,
+        distanceFromPreviousKm,
+        travelTimeMinFromPrevious,
+      });
+    });
+
+    const totalActivityMin = slots.reduce((sum, slot) => sum + slot.durationMin, 0);
+    const totalPlannedMin = totalActivityMin + totalTravelMin;
+    const warnings: string[] = [];
+
+    if (slots.length > MAX_PLACES_PER_DAY) {
+      warnings.push("Too many places assigned for one day");
+    }
+
+    if (totalPlannedMin > OVERLOAD_LIMIT_MIN) {
+      warnings.push("Overloaded day: consider moving one place to another day");
+    }
+
+    output.push({
+      dayNumber: day,
+      slots,
+      estimatedTravelMin: totalTravelMin,
+      estimatedDistanceKm: Number(totalDistanceKm.toFixed(1)),
+      totalPlannedMin,
+      warnings,
+    });
+  }
+
+  return output;
+}
+
+type ItineraryOutput = {
+  dayNumber: number;
+  estimatedTravelMin: number;
+  estimatedDistanceKm: number;
+  totalPlannedMin: number;
+  warnings: string[];
+  places: Array<{
+    name: string;
+    location: string;
+    time: string;
+    notes: string;
+    slot: SlotName;
+    travelTimeMinFromPrevious: number;
+    distanceFromPreviousKm: number;
+  }>;
+};
+
+function toDayWiseOutput(dayPlans: DayPlan[]): ItineraryOutput[] {
+  return dayPlans.map((day) => ({
+    dayNumber: day.dayNumber,
+    estimatedTravelMin: day.estimatedTravelMin,
+    estimatedDistanceKm: day.estimatedDistanceKm,
+    totalPlannedMin: day.totalPlannedMin,
+    warnings: day.warnings,
+    places: day.slots.map((slot) => ({
+      name: slot.name,
+      location: slot.location,
+      time: slot.time,
+      notes: slot.notes,
+      slot: slot.slot,
+      travelTimeMinFromPrevious: slot.travelTimeMinFromPrevious,
+      distanceFromPreviousKm: Number(slot.distanceFromPreviousKm.toFixed(1)),
+    })),
+  }));
+}
+
+function travelBalanceLabel(day: DayPlan) {
+  let transitions = 0;
+  for (let i = 1; i < day.slots.length; i += 1) {
+    if (day.slots[i].area !== day.slots[i - 1].area) {
+      transitions += 1;
+    }
+  }
+  if (transitions <= 1) {
+    return "Low travel time";
+  }
+  if (transitions === 2) {
+    return "Balanced travel";
+  }
+  return "High travel";
+}
+
+function mapApiDaysToPlans(days: Array<{ dayNumber: number; places: Array<{ name: string; time: string; location: string; notes?: string }> }>): DayPlan[] {
+  return [...days]
+    .sort((a, b) => a.dayNumber - b.dayNumber)
+    .map((day) => {
+      let previousCoords: [number, number] | null = null;
+      const slots = SLOT_ORDER.map((slotName, index) => {
+        const place = day.places[index] || {
+          name: "Free Exploration",
+          time: SLOT_TIMES[slotName],
+          location: "Flexible",
+          notes: "Keep this slot open for rest or spontaneous plans.",
+        };
+        const coords = resolveLatLng("custom", `${place.name}-${place.location}`, day.dayNumber, index);
+        const currentCoords: [number, number] = [coords.lat, coords.lng];
+        const distanceFromPreviousKm = previousCoords
+          ? haversineDistanceKm(previousCoords, currentCoords)
+          : 0;
+        const travelTimeMinFromPrevious = index === 0 ? 0 : estimateTravelTimeMin(distanceFromPreviousKm);
+        previousCoords = currentCoords;
+
+        return {
+          id: `${day.dayNumber}-${slotName}-${index}`,
+          slot: slotName,
+          time: place.time || SLOT_TIMES[slotName],
+          name: place.name,
+          location: place.location,
+          notes: place.notes || "",
+          area: "custom",
+          durationMin: 90,
+          lat: coords.lat,
+          lng: coords.lng,
+          distanceFromPreviousKm,
+          travelTimeMinFromPrevious,
+        } as SlotPlan;
+      });
+
+      const estimatedTravelMin = slots.reduce((sum, slot) => sum + slot.travelTimeMinFromPrevious, 0);
+      const estimatedDistanceKm = Number(slots.reduce((sum, slot) => sum + slot.distanceFromPreviousKm, 0).toFixed(1));
+      const totalActivityMin = slots.reduce((sum, slot) => sum + slot.durationMin, 0);
+      const totalPlannedMin = totalActivityMin + estimatedTravelMin;
+      const warnings = totalPlannedMin > 8 * 60 ? ["Overloaded day: consider moving one place to another day"] : [];
+
+      return {
+        dayNumber: day.dayNumber,
+        slots,
+        estimatedTravelMin,
+        estimatedDistanceKm,
+        totalPlannedMin,
+        warnings,
+      };
+    });
+}
+
+function buildItineraryPayload(dayPlans: DayPlan[]) {
+  return {
+    days: dayPlans.map((day) => ({
+      dayNumber: day.dayNumber,
+      places: day.slots.map((slot) => ({
+        name: slot.name,
+        time: slot.time,
+        location: slot.location,
+        notes: slot.notes,
+      })),
+    })),
+  };
+}
 
 export default function ItineraryPage() {
-  const [selectedTripId] = useState("1");
-  const [selectedDay, setSelectedDay] = useState("1");
-  const [showMap, setShowMap] = useState(false);
-  
-  const currentTrip = TRIP_ITINERARIES[selectedTripId];
-  const currentDayData = currentTrip.days.find((day) => day.id.toString() === selectedDay);
-  
-  // Calculate totals
-  const totalDays = currentTrip.days.length;
-  const totalBudget = currentTrip.days.reduce(
-    (sum, day) => sum + day.activities.reduce((daySum, activity) => daySum + activity.cost, 0),
-    0
+  const [trips, setTrips] = useState<TripOption[]>([]);
+  const [isTripsLoading, setIsTripsLoading] = useState(true);
+  const [selectedTripId, setSelectedTripId] = useState("");
+
+  const [destination, setDestination] = useState("");
+  const [days, setDays] = useState(3);
+  const [interests, setInterests] = useState<Interest[]>(["temple", "nature", "food"]);
+
+  const [dayPlans, setDayPlans] = useState<DayPlan[]>([]);
+  const [selectedDayNumber, setSelectedDayNumber] = useState<number>(1);
+  const [isLoadingItinerary, setIsLoadingItinerary] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [draggingSlot, setDraggingSlot] = useState<{ dayIndex: number; slotIndex: number } | null>(null);
+  const skipNextAutoSaveRef = useRef(true);
+  const lastSavedSignatureRef = useRef("");
+
+  const optimizedItinerary = useMemo(() => toDayWiseOutput(dayPlans), [dayPlans]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTrips = async () => {
+      try {
+        const response = await fetch("/api/trips", { cache: "no-store" });
+        const data = await response.json();
+
+        if (!response.ok) {
+          toast.error(data?.message || "Failed to load trips");
+          if (isMounted) {
+            setTrips([]);
+          }
+          return;
+        }
+
+        const apiTrips = Array.isArray(data?.trips) ? (data.trips as ApiTrip[]) : [];
+        const mapped: TripOption[] = apiTrips.map((trip) => ({
+          id: String(trip._id),
+          title: trip.title,
+          destination: trip.places?.[0] || trip.title,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+        }));
+
+        if (!isMounted) {
+          return;
+        }
+
+        setTrips(mapped);
+        const firstTrip = mapped[0];
+        if (firstTrip) {
+          setSelectedTripId(firstTrip.id);
+          setDestination(firstTrip.destination);
+          setDays(dayDiffInclusive(firstTrip.startDate, firstTrip.endDate));
+        }
+      } catch (error) {
+        console.error("Load trips error:", error);
+        toast.error("Could not load trips");
+      } finally {
+        if (isMounted) {
+          setIsTripsLoading(false);
+        }
+      }
+    };
+
+    loadTrips();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTripId) {
+      return;
+    }
+
+    const selected = trips.find((trip) => trip.id === selectedTripId);
+    if (!selected) {
+      return;
+    }
+
+    setDestination(selected.destination);
+    setDays(dayDiffInclusive(selected.startDate, selected.endDate));
+
+    let isMounted = true;
+
+    const loadItinerary = async () => {
+      setIsLoadingItinerary(true);
+      try {
+        const response = await fetch(`/api/trips/${selectedTripId}/itinerary`, { cache: "no-store" });
+        const data = await response.json();
+
+        if (!response.ok) {
+          toast.error(data?.message || "Failed to load itinerary");
+          return;
+        }
+
+        const apiDays = Array.isArray(data?.itinerary?.days) ? data.itinerary.days : [];
+        if (isMounted && apiDays.length > 0) {
+          const mappedPlans = mapApiDaysToPlans(apiDays);
+          skipNextAutoSaveRef.current = true;
+          lastSavedSignatureRef.current = JSON.stringify(buildItineraryPayload(mappedPlans));
+          setDayPlans(mappedPlans);
+        } else if (isMounted) {
+          skipNextAutoSaveRef.current = true;
+          lastSavedSignatureRef.current = "";
+          setDayPlans([]);
+        }
+      } catch (error) {
+        console.error("Load itinerary error:", error);
+        toast.error("Could not load itinerary");
+      } finally {
+        if (isMounted) {
+          setIsLoadingItinerary(false);
+        }
+      }
+    };
+
+    loadItinerary();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedTripId, trips]);
+
+  const totalActivities = useMemo(() => dayPlans.reduce((sum, day) => sum + day.slots.length, 0), [dayPlans]);
+
+  useEffect(() => {
+    if (dayPlans.length === 0) {
+      setSelectedDayNumber(1);
+      return;
+    }
+
+    const hasSelectedDay = dayPlans.some((day) => day.dayNumber === selectedDayNumber);
+    if (!hasSelectedDay) {
+      setSelectedDayNumber(dayPlans[0].dayNumber);
+    }
+  }, [dayPlans, selectedDayNumber]);
+
+  const selectedDayPlan = useMemo(
+    () => dayPlans.find((day) => day.dayNumber === selectedDayNumber) || dayPlans[0],
+    [dayPlans, selectedDayNumber]
   );
 
-  const dayBudget = currentDayData?.activities.reduce((sum, activity) => sum + activity.cost, 0) || 0;
+  const selectedDayMapPlaces = useMemo<Place[]>(() => {
+    if (!selectedDayPlan) {
+      return [];
+    }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0,
-    }).format(amount);
+    return selectedDayPlan.slots.map((slot) => ({
+      id: slot.id,
+      name: slot.name,
+      description: slot.notes || `${slot.slot} activity`,
+      lat: slot.lat,
+      lng: slot.lng,
+      category: "attraction",
+      time: slot.time,
+      address: slot.location,
+    }));
+  }, [selectedDayPlan]);
+
+  const handleInterestToggle = (interest: Interest, checked: boolean | "indeterminate") => {
+    if (checked === "indeterminate") {
+      return;
+    }
+    setInterests((prev) => {
+      if (checked) {
+        return prev.includes(interest) ? prev : [...prev, interest];
+      }
+      return prev.filter((item) => item !== interest);
+    });
   };
 
-  // Share functionality
-  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
-  const shareTitle = `${currentTrip.title} - Trip Itinerary`;
-  const shareText = `Check out my trip to ${currentTrip.title} (${currentTrip.dates})`;
+  const handleGenerate = () => {
+    const cleanDestination = destination.trim();
+    if (!cleanDestination) {
+      toast.error("Destination is required");
+      return;
+    }
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(shareUrl);
-    toast.success("Link copied to clipboard!");
+    if (days < 1 || days > 14) {
+      toast.error("Days must be between 1 and 14");
+      return;
+    }
+
+    const generated = generateItinerary(cleanDestination, days, interests);
+    setDayPlans(generated);
+    const optimized = toDayWiseOutput(generated);
+    const overloadedDays = optimized.filter((day) => day.warnings.length > 0).length;
+
+    if (overloadedDays > 0) {
+      toast.warning(`Optimized itinerary generated with ${overloadedDays} overloaded day${overloadedDays > 1 ? "s" : ""}`);
+      return;
+    }
+
+    toast.success("Optimized itinerary generated successfully");
   };
 
-  const handleWhatsAppShare = () => {
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${shareText}\n${shareUrl}`)}`;
-    window.open(whatsappUrl, "_blank");
+  const saveItinerary = useCallback(async (source: "manual" | "auto") => {
+    if (!selectedTripId) {
+      toast.error("Select a trip first");
+      return false;
+    }
+
+    if (dayPlans.length === 0) {
+      toast.error("Generate itinerary before saving");
+      return false;
+    }
+
+    if (source === "manual") {
+      setIsSaving(true);
+    } else {
+      setIsAutoSaving(true);
+    }
+
+    const payload = buildItineraryPayload(dayPlans);
+    const payloadSignature = JSON.stringify(payload);
+
+    try {
+      const response = await fetch(`/api/trips/${selectedTripId}/itinerary`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        toast.error(data?.message || "Failed to save itinerary");
+        return false;
+      }
+
+      lastSavedSignatureRef.current = payloadSignature;
+      toast.success(source === "auto" ? "Itinerary auto-saved" : "Itinerary saved to database");
+      return true;
+    } catch (error) {
+      console.error("Save itinerary error:", error);
+      toast.error("Could not save itinerary");
+      return false;
+    } finally {
+      if (source === "manual") {
+        setIsSaving(false);
+      } else {
+        setIsAutoSaving(false);
+      }
+    }
+  }, [dayPlans, selectedTripId]);
+
+  const handleSave = async () => {
+    await saveItinerary("manual");
   };
 
-  const handleEmailShare = () => {
-    const emailUrl = `mailto:?subject=${encodeURIComponent(shareTitle)}&body=${encodeURIComponent(`${shareText}\n\n${shareUrl}`)}`;
-    window.location.href = emailUrl;
+  useEffect(() => {
+    if (!selectedTripId || dayPlans.length === 0 || isLoadingItinerary) {
+      return;
+    }
+
+    if (skipNextAutoSaveRef.current) {
+      skipNextAutoSaveRef.current = false;
+      return;
+    }
+
+    const payloadSignature = JSON.stringify(buildItineraryPayload(dayPlans));
+    if (payloadSignature === lastSavedSignatureRef.current) {
+      return;
+    }
+
+    const timerId = setTimeout(() => {
+      void saveItinerary("auto");
+    }, 1200);
+
+    return () => {
+      clearTimeout(timerId);
+    };
+  }, [dayPlans, isLoadingItinerary, saveItinerary, selectedTripId]);
+
+  const handleDragStart = (dayIndex: number, slotIndex: number) => {
+    setDraggingSlot({ dayIndex, slotIndex });
   };
 
-  const handleTwitterShare = () => {
-    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
-    window.open(twitterUrl, "_blank");
-  };
+  const handleDrop = (dayIndex: number, slotIndex: number) => {
+    if (!draggingSlot) {
+      return;
+    }
 
-  const handleFacebookShare = () => {
-    const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
-    window.open(facebookUrl, "_blank");
+    if (draggingSlot.dayIndex === dayIndex && draggingSlot.slotIndex === slotIndex) {
+      setDraggingSlot(null);
+      return;
+    }
+
+    setDayPlans((prev) => {
+      const next = prev.map((day) => ({ ...day, slots: [...day.slots] }));
+      const source = next[draggingSlot.dayIndex]?.slots[draggingSlot.slotIndex];
+      const target = next[dayIndex]?.slots[slotIndex];
+
+      if (!source || !target) {
+        return prev;
+      }
+
+      next[draggingSlot.dayIndex].slots[draggingSlot.slotIndex] = target;
+      next[dayIndex].slots[slotIndex] = source;
+      return next;
+    });
+
+    setDraggingSlot(null);
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.09),transparent_42%),linear-gradient(to_bottom,#f8fafc,#f1f5f9)] dark:bg-[radial-gradient(circle_at_top,rgba(8,145,178,0.18),transparent_35%),linear-gradient(to_bottom,#09090b,#0a0a0a)]">
       <Navbar />
 
-      {/* ============ STICKY HEADER ============ */}
-      <div className="sticky top-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm border-b border-zinc-200 dark:border-zinc-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="py-6"
-          >
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-              {/* Left: Trip Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start gap-4">
-                  {/* Trip Icon */}
-                  <div className="hidden sm:flex shrink-0 w-14 h-14 rounded-2xl bg-linear-to-br from-primary/20 to-purple-500/20 items-center justify-center">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="w-7 h-7 text-primary"
-                    >
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                      <circle cx="12" cy="10" r="3" />
-                    </svg>
-                  </div>
-
-                  {/* Trip Details */}
-                  <div className="flex-1 min-w-0">
-                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-zinc-900 dark:text-zinc-50 mb-2 truncate">
-                      {currentTrip.title}
-                    </h1>
-                    <div className="flex flex-wrap items-center gap-4 text-sm">
-                      <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="w-4 h-4"
-                        >
-                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                          <line x1="16" y1="2" x2="16" y2="6" />
-                          <line x1="8" y1="2" x2="8" y2="6" />
-                          <line x1="3" y1="10" x2="21" y2="10" />
-                        </svg>
-                        <span className="font-medium">{currentTrip.dates}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="w-4 h-4"
-                        >
-                          <circle cx="12" cy="12" r="10" />
-                          <polyline points="12 6 12 12 16 14" />
-                        </svg>
-                        <span>{totalDays} days</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="w-4 h-4"
-                        >
-                          <line x1="12" y1="1" x2="12" y2="23" />
-                          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                        </svg>
-                        <span className="font-medium text-green-600 dark:text-green-400">
-                          {formatCurrency(totalBudget)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right: Action Buttons */}
-              <div className="flex items-center gap-3 shrink-0">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="default" className="gap-2">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="w-4 h-4"
-                      >
-                        <circle cx="18" cy="5" r="3" />
-                        <circle cx="6" cy="12" r="3" />
-                        <circle cx="18" cy="19" r="3" />
-                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-                      </svg>
-                      <span className="hidden sm:inline">Share</span>
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-56 p-3" align="end">
-                    <div className="space-y-1">
-                      <h4 className="font-semibold text-sm mb-3 text-zinc-900 dark:text-zinc-50">
-                        Share Itinerary
-                      </h4>
-                      
-                      {/* Copy Link */}
-                      <button
-                        onClick={handleCopyLink}
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-left"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="w-4 h-4 text-zinc-600 dark:text-zinc-400"
-                          >
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">Copy Link</p>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400">Share via clipboard</p>
-                        </div>
-                      </button>
-
-                      {/* WhatsApp */}
-                      <button
-                        onClick={handleWhatsAppShare}
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-left"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-green-500/10 dark:bg-green-500/20 flex items-center justify-center shrink-0">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="w-4 h-4 text-green-600 dark:text-green-400"
-                          >
-                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">WhatsApp</p>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400">Share on WhatsApp</p>
-                        </div>
-                      </button>
-
-                      {/* Email */}
-                      <button
-                        onClick={handleEmailShare}
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-left"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center shrink-0">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="w-4 h-4 text-blue-600 dark:text-blue-400"
-                          >
-                            <rect x="2" y="4" width="20" height="16" rx="2" />
-                            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">Email</p>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400">Share via email</p>
-                        </div>
-                      </button>
-
-                      {/* Twitter */}
-                      <button
-                        onClick={handleTwitterShare}
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-left"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-sky-500/10 dark:bg-sky-500/20 flex items-center justify-center shrink-0">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="w-4 h-4 text-sky-600 dark:text-sky-400"
-                          >
-                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">Twitter</p>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400">Post on Twitter</p>
-                        </div>
-                      </button>
-
-                      {/* Facebook */}
-                      <button
-                        onClick={handleFacebookShare}
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-left"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-blue-600/10 dark:bg-blue-600/20 flex items-center justify-center shrink-0">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="w-4 h-4 text-blue-600 dark:text-blue-400"
-                          >
-                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">Facebook</p>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400">Share on Facebook</p>
-                        </div>
-                      </button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-          </motion.div>
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">AI Itinerary Generator</h1>
+          <p className="mt-2 text-zinc-600 dark:text-zinc-400">
+            Enter destination, days, and interests to generate a day-wise timeline with morning, afternoon, and evening slots.
+          </p>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+          <Card className="h-fit border-zinc-200/80 bg-white/90 shadow-lg dark:border-zinc-800 dark:bg-zinc-900/85">
+            <CardHeader>
+              <CardTitle className="text-lg">Generator Inputs</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-2">
+                <Label>Trip</Label>
+                <Select value={selectedTripId} onValueChange={setSelectedTripId} disabled={isTripsLoading || trips.length === 0}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={isTripsLoading ? "Loading trips..." : "Select trip"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {trips.map((trip) => (
+                      <SelectItem key={trip.id} value={trip.id}>
+                        {trip.destination}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-        {/* ============ SUMMARY ============ */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6"
-        >
-          {/* Total Budget */}
-          <Card className="border-zinc-200 dark:border-zinc-800">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-1">Total Budget</p>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-                    {formatCurrency(totalBudget)}
+              <div className="space-y-2">
+                <Label htmlFor="destination">Destination</Label>
+                <Input
+                  id="destination"
+                  value={destination}
+                  onChange={(event) => setDestination(event.target.value)}
+                  placeholder="Ex: Jaipur"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="days">Days</Label>
+                <Input
+                  id="days"
+                  type="number"
+                  min={1}
+                  max={14}
+                  value={days}
+                  onChange={(event) => setDays(Number(event.target.value || 1))}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label>Interests</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {INTEREST_OPTIONS.map((item) => (
+                    <label
+                      key={item.value}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
+                        interests.includes(item.value)
+                          ? "border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300"
+                          : "border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      <Checkbox
+                        checked={interests.includes(item.value)}
+                        onCheckedChange={(checked) => handleInterestToggle(item.value, checked)}
+                      />
+                      <span>{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button className="flex-1 bg-cyan-600 text-white hover:bg-cyan-700" onClick={handleGenerate}>
+                  Generate
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={handleSave} disabled={isSaving || isAutoSaving || dayPlans.length === 0}>
+                  {isSaving || isAutoSaving ? "Saving..." : "Save"}
+                </Button>
+              </div>
+
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+                Drag and drop timeline cards to reorder slots across days.
+                <span className="ml-1 font-medium text-zinc-700 dark:text-zinc-300">
+                  Auto-save: {isAutoSaving ? "Saving..." : "On"}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Card className="border-zinc-200/80 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/85">
+                <CardContent className="p-4">
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Generated Days</p>
+                  <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-50">{dayPlans.length}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-zinc-200/80 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/85">
+                <CardContent className="p-4">
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Timeline Slots</p>
+                  <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-50">{totalActivities}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-zinc-200/80 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/85">
+                <CardContent className="p-4">
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Status</p>
+                  <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                    {isLoadingItinerary
+                      ? "Loading itinerary..."
+                      : dayPlans.length > 0
+                        ? (optimizedItinerary.some((day) => day.warnings.length > 0) ? "Needs review" : "Ready")
+                        : "Not generated"}
                   </p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-green-500/10 dark:bg-green-500/20 flex items-center justify-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="w-6 h-6 text-green-600 dark:text-green-400"
-                  >
-                    <line x1="12" y1="1" x2="12" y2="23" />
-                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                  </svg>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Total Days */}
-          <Card className="border-zinc-200 dark:border-zinc-800">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-1">Total Days</p>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{totalDays}</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="w-6 h-6 text-blue-600 dark:text-blue-400"
-                  >
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Places to Visit */}
-          <Card className="border-zinc-200 dark:border-zinc-800">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-1">Places</p>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-                    {currentTrip.days.reduce((sum, day) => sum + day.activities.length, 0)}
-                  </p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-purple-500/10 dark:bg-purple-500/20 flex items-center justify-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="w-6 h-6 text-purple-600 dark:text-purple-400"
-                  >
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                    <circle cx="12" cy="10" r="3" />
-                  </svg>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* ============ DAY TABS ============ */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="mb-6"
-        >
-          <Tabs value={selectedDay} onValueChange={setSelectedDay}>
-            <div className="flex items-center justify-between mb-6">
-              <TabsList className="bg-zinc-100 dark:bg-zinc-900">
-                {currentTrip.days.map((day) => (
-                  <TabsTrigger key={day.id} value={day.id.toString()}>
-                    Day {day.id}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-
-              {/* Map Toggle */}
-              <Button
-                variant={showMap ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowMap(!showMap)}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-4 h-4 mr-2"
-                >
-                  <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
-                  <line x1="9" y1="3" x2="9" y2="18" />
-                  <line x1="15" y1="6" x2="15" y2="21" />
-                </svg>
-                {showMap ? "Hide Map" : "Show Map"}
-              </Button>
+                </CardContent>
+              </Card>
             </div>
 
-            {/* ============ MAIN CONTENT AREA ============ */}
-            <div className={cn("grid gap-6", showMap ? "lg:grid-cols-2" : "lg:grid-cols-1")}>
-              {/* Timeline View */}
-              <div>
-                {currentTrip.days.map((day) => (
-                  <TabsContent key={day.id} value={day.id.toString()} className="mt-0">
-                    {/* Day Header */}
-                    <Card className="border-zinc-200 dark:border-zinc-800 mb-4">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                              {day.date}
-                            </h3>
-                            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                              {day.activities.length} activities planned
-                            </p>
-                          </div>
-                          <Badge variant="secondary" className="text-sm">
-                            {formatCurrency(
-                              day.activities.reduce((sum, activity) => sum + activity.cost, 0)
-                            )}
-                          </Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
+            {dayPlans.length === 0 ? (
+              <Card className="border-dashed border-zinc-300 bg-white/80 dark:border-zinc-700 dark:bg-zinc-900/70">
+                <CardContent className="py-16 text-center">
+                  <p className="text-zinc-600 dark:text-zinc-400">No itinerary yet. Generate one to see the day-wise timeline.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                <div className="space-y-4">
+                  <Card className="border-zinc-200/80 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
+                    <CardHeader className="pb-4">
+                      <CardTitle className="text-lg">Days</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-3">
+                      {dayPlans.map((day) => (
+                        <Button
+                          key={day.dayNumber}
+                          type="button"
+                          variant={selectedDayNumber === day.dayNumber ? "default" : "outline"}
+                          className={cn(
+                            "justify-start",
+                            selectedDayNumber === day.dayNumber && "bg-cyan-600 text-white hover:bg-cyan-700"
+                          )}
+                          onClick={() => setSelectedDayNumber(day.dayNumber)}
+                        >
+                          Day {day.dayNumber}
+                        </Button>
+                      ))}
+                    </CardContent>
+                  </Card>
 
-                    {/* Timeline Activities */}
-                    <div className="space-y-4">
-                      <AnimatePresence mode="popLayout">
-                        {day.activities.map((activity, index) => (
-                          <motion.div
-                            key={activity.id}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 20 }}
-                            transition={{ delay: index * 0.05 }}
-                          >
-                            <Card className="border-zinc-200 dark:border-zinc-800 hover:shadow-lg transition-shadow group">
-                              <CardContent className="p-5">
-                                <div className="flex gap-4">
-                                  {/* Timeline Marker */}
-                                  <div className="flex flex-col items-center">
-                                    <div className="w-10 h-10 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                                      <span className="text-sm font-semibold">
-                                        {activity.time.split(" ")[0]}
-                                      </span>
-                                    </div>
-                                    {index < day.activities.length - 1 && (
-                                      <div className="w-0.5 h-full bg-zinc-200 dark:bg-zinc-800 mt-2" />
+                  {selectedDayPlan && (
+                    <Card className="border-zinc-200/80 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
+                      <CardHeader className="border-b border-zinc-100 pb-4 dark:border-zinc-800">
+                        <div className="flex items-center justify-between gap-4">
+                          <CardTitle className="text-lg">Day {selectedDayPlan.dayNumber}</CardTitle>
+                          <Badge variant="secondary">{travelBalanceLabel(selectedDayPlan)}</Badge>
+                        </div>
+                        {selectedDayPlan.warnings.length > 0 && (
+                          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                            {selectedDayPlan.warnings.join(". ")}
+                          </div>
+                        )}
+                      </CardHeader>
+                      <CardContent className="pt-5">
+                        <div className="mb-4 grid grid-cols-3 gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+                          <div>
+                            <p className="text-zinc-500 dark:text-zinc-500">Distance</p>
+                            <p className="mt-1 font-semibold text-zinc-900 dark:text-zinc-100">{selectedDayPlan.estimatedDistanceKm.toFixed(1)} km</p>
+                          </div>
+                          <div>
+                            <p className="text-zinc-500 dark:text-zinc-500">Travel</p>
+                            <p className="mt-1 font-semibold text-zinc-900 dark:text-zinc-100">{selectedDayPlan.estimatedTravelMin} min</p>
+                          </div>
+                          <div>
+                            <p className="text-zinc-500 dark:text-zinc-500">Planned</p>
+                            <p className="mt-1 font-semibold text-zinc-900 dark:text-zinc-100">{selectedDayPlan.totalPlannedMin} min</p>
+                          </div>
+                        </div>
+                        <div className="relative space-y-4">
+                          <div className="absolute left-4.75 top-2 h-[calc(100%-8px)] w-px bg-zinc-200 dark:bg-zinc-800" />
+                          {selectedDayPlan.slots.map((slot, slotIndex) => {
+                            const selectedDayIndex = dayPlans.findIndex((day) => day.dayNumber === selectedDayPlan.dayNumber);
+
+                            return (
+                              <div
+                                key={slot.id}
+                                className={cn(
+                                  "relative ml-0 flex gap-3 rounded-xl border border-zinc-200 bg-white p-4 transition-all dark:border-zinc-800 dark:bg-zinc-900",
+                                  draggingSlot?.dayIndex === selectedDayIndex && draggingSlot?.slotIndex === slotIndex
+                                    ? "opacity-60"
+                                    : "opacity-100"
+                                )}
+                                draggable
+                                onDragStart={() => handleDragStart(selectedDayIndex, slotIndex)}
+                                onDragOver={(event) => event.preventDefault()}
+                                onDrop={() => handleDrop(selectedDayIndex, slotIndex)}
+                              >
+                                <div className="relative z-10 mt-2 h-3 w-3 shrink-0 rounded-full bg-cyan-500" />
+                                <div className="flex-1">
+                                  <div className="mb-2 flex items-center gap-2">
+                                    <Badge variant="outline" className="capitalize">{slot.slot}</Badge>
+                                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{slot.time}</span>
+                                    <span className="text-xs text-zinc-400">{slot.durationMin} min</span>
+                                    {slot.travelTimeMinFromPrevious > 0 && (
+                                      <span className="text-xs text-zinc-400">+{slot.travelTimeMinFromPrevious} min travel</span>
                                     )}
                                   </div>
-
-                                  {/* Activity Content */}
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-start justify-between gap-4 mb-2">
-                                      <div className="flex-1">
-                                        <h4 className="font-semibold text-zinc-900 dark:text-zinc-50 mb-1 group-hover:text-primary transition-colors">
-                                          {activity.title}
-                                        </h4>
-                                        <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
-                                          <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            className="w-3.5 h-3.5"
-                                          >
-                                            <circle cx="12" cy="12" r="10" />
-                                            <polyline points="12 6 12 12 16 14" />
-                                          </svg>
-                                          <span>{activity.time}</span>
-                                        </div>
-                                      </div>
-                                      <div className="text-right shrink-0">
-                                        <p className="font-semibold text-zinc-900 dark:text-zinc-50">
-                                          {activity.cost === 0
-                                            ? "Free"
-                                            : formatCurrency(activity.cost)}
-                                        </p>
-                                      </div>
-                                    </div>
-
-                                    {/* Action Buttons */}
-                                    <div className="flex items-center gap-2 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <Button variant="ghost" size="sm" className="h-8 text-xs">
-                                        Edit
-                                      </Button>
-                                      <Button variant="ghost" size="sm" className="h-8 text-xs">
-                                        Delete
-                                      </Button>
-                                      <Button variant="ghost" size="sm" className="h-8 text-xs">
-                                        Details
-                                      </Button>
-                                    </div>
-                                  </div>
+                                  <h3 className="font-semibold text-zinc-900 dark:text-zinc-50">{slot.name}</h3>
+                                  <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{slot.location}</p>
+                                  <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{slot.notes}</p>
+                                  {slot.distanceFromPreviousKm > 0 && (
+                                    <p className="mt-1 text-xs text-zinc-400">Distance from previous: {slot.distanceFromPreviousKm.toFixed(1)} km</p>
+                                  )}
                                 </div>
-                              </CardContent>
-                            </Card>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  </TabsContent>
-                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+
+                <Card className="border-zinc-200/80 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
+                  <CardHeader className="border-b border-zinc-100 pb-4 dark:border-zinc-800">
+                    <CardTitle className="text-lg">
+                      Map - Day {selectedDayPlan?.dayNumber || "-"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    {selectedDayMapPlaces.length === 0 ? (
+                      <div className="flex h-130 items-center justify-center rounded-xl border border-dashed border-zinc-300 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+                        Select a day to view markers
+                      </div>
+                    ) : (
+                      <div className="h-130 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+                        <ItineraryMap places={selectedDayMapPlaces} />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
-
-              {/* ============ MAP PREVIEW ============ */}
-              <AnimatePresence>
-                {showMap && (
-                  <motion.div
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 20 }}
-                    className="lg:sticky lg:top-8 h-fit"
-                  >
-                    <Card className="border-zinc-200 dark:border-zinc-800 overflow-hidden">
-                      <CardContent className="p-0">
-                        {/* Map Preview with Decorative Background */}
-                        <div className="relative bg-linear-to-br from-blue-50 via-cyan-50 to-teal-50 dark:from-blue-950 dark:via-cyan-950 dark:to-teal-950 aspect-square flex items-center justify-center overflow-hidden">
-                          {/* Decorative Map Grid Lines */}
-                          <div className="absolute inset-0 opacity-10">
-                            <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-                              <defs>
-                                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1"/>
-                                </pattern>
-                              </defs>
-                              <rect width="100%" height="100%" fill="url(#grid)" />
-                            </svg>
-                          </div>
-
-                          {/* Decorative Route Path */}
-                          <svg className="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 400 400">
-                            <path
-                              d="M 50 200 Q 100 100, 200 150 T 350 200"
-                              stroke="currentColor"
-                              strokeWidth="3"
-                              fill="none"
-                              strokeDasharray="10 5"
-                              className="text-primary"
-                            />
-                            <circle cx="50" cy="200" r="8" fill="currentColor" className="text-green-500" />
-                            <circle cx="200" cy="150" r="8" fill="currentColor" className="text-blue-500" />
-                            <circle cx="350" cy="200" r="8" fill="currentColor" className="text-red-500" />
-                          </svg>
-
-                          {/* Center Content */}
-                          <div className="relative text-center p-8 z-10">
-                            <motion.div
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                              className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-white dark:bg-zinc-900 shadow-lg flex items-center justify-center"
-                            >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                className="w-10 h-10 text-primary"
-                              >
-                                <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
-                                <line x1="9" y1="3" x2="9" y2="18" />
-                                <line x1="15" y1="6" x2="15" y2="21" />
-                              </svg>
-                            </motion.div>
-                            <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-                              Interactive Map View
-                            </p>
-                            <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
-                              View all locations on the map
-                            </p>
-                            <Button variant="outline" size="sm" asChild className="shadow-md hover:shadow-lg transition-shadow">
-                              <Link href="/map">
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  className="w-4 h-4 mr-2"
-                                >
-                                  <circle cx="12" cy="12" r="10" />
-                                  <polyline points="12 16 16 12 12 8" />
-                                  <line x1="8" y1="12" x2="16" y2="12" />
-                                </svg>
-                                Open Full Map
-                              </Link>
-                            </Button>
-                          </div>
-
-                          {/* Floating Location Markers */}
-                          <motion.div
-                            animate={{ y: [0, -10, 0] }}
-                            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                            className="absolute top-20 left-16 w-8 h-8 rounded-full bg-red-500/20 dark:bg-red-500/30 backdrop-blur-sm flex items-center justify-center"
-                          >
-                            <div className="w-3 h-3 rounded-full bg-red-500" />
-                          </motion.div>
-                          <motion.div
-                            animate={{ y: [0, -8, 0] }}
-                            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-                            className="absolute bottom-24 right-20 w-8 h-8 rounded-full bg-blue-500/20 dark:bg-blue-500/30 backdrop-blur-sm flex items-center justify-center"
-                          >
-                            <div className="w-3 h-3 rounded-full bg-blue-500" />
-                          </motion.div>
-                          <motion.div
-                            animate={{ y: [0, -12, 0] }}
-                            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                            className="absolute top-32 right-24 w-8 h-8 rounded-full bg-green-500/20 dark:bg-green-500/30 backdrop-blur-sm flex items-center justify-center"
-                          >
-                            <div className="w-3 h-3 rounded-full bg-green-500" />
-                          </motion.div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* Day Summary */}
-                    <Card className="border-zinc-200 dark:border-zinc-800 mt-4">
-                      <CardContent className="p-4">
-                        <h4 className="font-semibold text-zinc-900 dark:text-zinc-50 mb-3">
-                          Day {selectedDay} Summary
-                        </h4>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-zinc-600 dark:text-zinc-400">Activities:</span>
-                            <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                              {currentDayData?.activities.length || 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-zinc-600 dark:text-zinc-400">Total Cost:</span>
-                            <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                              {formatCurrency(dayBudget)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-zinc-600 dark:text-zinc-400">Duration:</span>
-                            <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                              Full Day
-                            </span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </Tabs>
-        </motion.div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ import { Button } from "@/packages/components/ui/button";
 
 export default function Home() {
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-green-50">
+    <div className="relative min-h-screen flex items-center justify-center bg-linear-to-br from-sky-50 to-cyan-50">
       {/* Background Image */}
       <div className="absolute inset-0 w-full h-full opacity-30">
         <Image
@@ -37,8 +37,8 @@ export default function Home() {
         </p>
 
         <div className="mt-6 flex justify-center">
-          <Button asChild size="lg" className="bg-blue-600 hover:bg-blue-700">
-            <Link href="/auth">Get Started</Link>
+          <Button asChild size="lg" className="bg-cyan-600 hover:bg-cyan-700 text-white transition-all duration-300 hover:scale-[1.02]">
+            <Link href="/auth?mode=login">Get Started</Link>
           </Button>
         </div>
       </div>

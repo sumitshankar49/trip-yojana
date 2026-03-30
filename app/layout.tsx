@@ -5,6 +5,7 @@ import { cn } from "@/packages/lib/utils";
 import { TooltipProvider } from "@/packages/components/ui/tooltip";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/packages/components/shared/ThemeProvider";
+import SessionProvider from "@/packages/components/auth/SessionProvider";
 
 const roboto = Roboto({subsets:['latin'],variable:'--font-sans'});
 
@@ -35,17 +36,19 @@ export default function RootLayout({
       className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", roboto.variable)}
     >
       <body className="min-h-full flex flex-col">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange={false}
-        >
-          <TooltipProvider>
-            {children}
-            <Toaster position="top-right" richColors closeButton />
-          </TooltipProvider>
-        </ThemeProvider>
+        <SessionProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange={false}
+          >
+            <TooltipProvider>
+              {children}
+              <Toaster position="top-right" richColors closeButton />
+            </TooltipProvider>
+          </ThemeProvider>
+        </SessionProvider>
       </body>
     </html>
   );

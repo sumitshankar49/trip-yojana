@@ -10,11 +10,11 @@ export type {
 
 // Export all components
 export {
-  MapComponent,
   PlaceCard,
   PlacesList,
   SelectedPlaceOverlay,
 } from "./components";
+export { MapComponent } from "./components/MapComponent";
 
 // Export hooks
 export { useMapData } from "./hooks";

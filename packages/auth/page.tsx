@@ -1,44 +1,63 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useEffect, useState, FormEvent } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { signIn } from "next-auth/react";
+import { toast } from "sonner";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/packages/components/ui/card";
 import { Input } from "@/packages/components/ui/input";
 import { Label } from "@/packages/components/ui/label";
 import { Button } from "@/packages/components/ui/button";
 import { AuthMode, FormErrors } from "./types";
 import { AUTH_LABELS, AUTH_MESSAGES } from "./constants";
-import { validateEmail, validatePassword, validateConfirmPassword } from "./validations";
+import { validateName, validateEmail, validatePassword, validateConfirmPassword } from "./validations";
 
 export default function AuthPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [mode, setMode] = useState<AuthMode>("login");
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   
-  const [formData, setFormData] = useState({
+  const [authFormData, setAuthFormData] = useState({
+    name: "",
     email: "",
     password: "",
     confirmPassword: "",
   });
 
+  const inputBaseClassName = "h-12 bg-white dark:bg-zinc-800 border-2 border-zinc-200 dark:border-zinc-700 focus:border-cyan-500 focus:ring-cyan-500 rounded-lg transition-all duration-300 focus:scale-[1.01]";
+
+  useEffect(() => {
+    const requestedMode = searchParams.get("mode");
+    if (requestedMode === "signup" || requestedMode === "login") {
+      setMode(requestedMode);
+    }
+  }, [searchParams]);
+
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
+    // Name validation (only for signup)
+    if (mode === "signup") {
+      const nameError = validateName(authFormData.name);
+      if (nameError) newErrors.name = nameError;
+    }
+
     // Email validation
-    const emailError = validateEmail(formData.email);
+    const emailError = validateEmail(authFormData.email);
     if (emailError) newErrors.email = emailError;
 
     // Password validation
-    const passwordError = validatePassword(formData.password);
+    const passwordError = validatePassword(authFormData.password);
     if (passwordError) newErrors.password = passwordError;
 
     // Confirm password validation (only for signup)
     if (mode === "signup") {
       const confirmPasswordError = validateConfirmPassword(
-        formData.password,
-        formData.confirmPassword
+        authFormData.password,
+        authFormData.confirmPassword
       );
       if (confirmPasswordError) newErrors.confirmPassword = confirmPasswordError;
     }
@@ -56,32 +75,82 @@ export default function AuthPage() {
 
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      console.log(`${mode} submitted:`, {
-        email: formData.email,
-        password: formData.password,
-      });
-      
-      // Reset form after successful submission
-      setFormData({ email: "", password: "", confirmPassword: "" });
-      setErrors({});
-      
-      // Navigate to dashboard
-      router.push("/dashboard");
-    }, 2000);
+    try {
+      if (mode === "signup") {
+        // Register new user
+        const response = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: authFormData.name,
+            email: authFormData.email,
+            password: authFormData.password,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          toast.error(data.message || "Registration failed");
+          setIsLoading(false);
+          return;
+        }
+
+        toast.success("Account created successfully! Please log in.");
+        
+        // Switch to login mode after successful registration
+        setMode("login");
+        router.replace("/auth?mode=login");
+        setAuthFormData({ name: "", email: authFormData.email, password: "", confirmPassword: "" });
+        setErrors({});
+        setIsLoading(false);
+      } else {
+        // Login existing user
+        const result = await signIn("credentials", {
+          email: authFormData.email,
+          password: authFormData.password,
+          redirect: false,
+        });
+
+        if (result?.error) {
+          toast.error(result.error);
+          setIsLoading(false);
+          return;
+        }
+
+        if (result?.ok) {
+          toast.success("Login successful!");
+          
+          // Reset form
+          setAuthFormData({ name: "", email: "", password: "", confirmPassword: "" });
+          setErrors({});
+          
+          // Navigate to dashboard
+          router.push("/dashboard");
+          router.refresh();
+        }
+      }
+    } catch (error) {
+      console.error("Auth error:", error);
+      toast.error("Something went wrong. Please try again.");
+      setIsLoading(false);
+    }
   };
 
   const toggleMode = () => {
-    setMode((prev) => (prev === "login" ? "signup" : "login"));
+    const nextMode = mode === "login" ? "signup" : "login";
+    setMode(nextMode);
+    router.replace(`/auth?mode=${nextMode}`);
     setErrors({});
-    setFormData({ email: "", password: "", confirmPassword: "" });
+    setAuthFormData({ name: "", email: "", password: "", confirmPassword: "" });
   };
 
-  const handleInputChange = (field: keyof typeof formData) => (
+  const handleInputChange = (field: keyof typeof authFormData) => (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+    setAuthFormData((prev) => ({ ...prev, [field]: e.target.value }));
     // Clear error for this field when user starts typing
     if (errors[field as keyof FormErrors]) {
       setErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -91,7 +160,7 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen grid lg:grid-cols-[55%_45%]">
       {/* Left Side - Image (Hidden on mobile) */}
-      <div className="hidden lg:flex relative bg-linear-to-br from-purple-600 via-blue-500 to-green-400 overflow-hidden">
+      <div className="hidden lg:flex relative bg-linear-to-br from-sky-600 via-cyan-500 to-blue-500 overflow-hidden">
         {/* Background Image - Full Cover */}
         <div className="absolute inset-0 w-full h-full">
           <Image
@@ -104,7 +173,7 @@ export default function AuthPage() {
         </div>
         
         {/* Gradient Overlay for better text readability */}
-        <div className="absolute inset-0 bg-linear-to-br from-purple-600/40 via-blue-500/40 to-green-400/40"></div>
+        <div className="absolute inset-0 bg-linear-to-br from-sky-600/40 via-cyan-500/40 to-blue-500/40"></div>
         
         {/* Content on top */}
         <div className="relative z-10 w-full h-full flex flex-col items-center justify-end p-10 pb-16">
@@ -121,7 +190,7 @@ export default function AuthPage() {
 
       {/* Right Side - Form */}
       <div className="flex items-center justify-center bg-[#F5F5F5] dark:bg-zinc-950 p-6 sm:p-8 lg:p-12">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-md animate-fade-in-up">
           {/* Logo for mobile */}
           <div className="lg:hidden text-center mb-8">
             <div className="relative w-48 h-16 mx-auto mb-3">
@@ -136,15 +205,36 @@ export default function AuthPage() {
             <p className="text-sm text-zinc-600 dark:text-zinc-400">{AUTH_LABELS.TAGLINE}</p>
           </div>
 
-          <Card className="border border-zinc-200 dark:border-zinc-800 shadow-2xl bg-white dark:bg-zinc-900 rounded-2xl">
-            <CardHeader className="space-y-1 pb-6 px-8 pt-8">
-              <CardTitle className="text-2xl font-bold text-center text-zinc-900 dark:text-white">
+          <Card className="border border-zinc-200 dark:border-zinc-800 shadow-2xl bg-white dark:bg-zinc-900 rounded-2xl animate-fade-in-up animation-delay-200">
+            <CardHeader key={`header-${mode}`} className="space-y-1 pb-6 px-8 pt-8 animate-fade-in animation-delay-400">
+              <CardTitle className="text-2xl font-bold text-center text-zinc-900 dark:text-white transition-all duration-300">
                 {mode === "login" ? AUTH_LABELS.LOGIN_TITLE : AUTH_LABELS.SIGNUP_TITLE}
               </CardTitle>
             </CardHeader>
         
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4 px-8">
+          <CardContent key={`content-${mode}`} className="space-y-4 px-8 animate-fade-in-up animation-delay-200">
+            {mode === "signup" && (
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
+                  {AUTH_LABELS.NAME_LABEL}
+                </Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder={AUTH_LABELS.NAME_PLACEHOLDER}
+                  value={authFormData.name}
+                  onChange={handleInputChange("name")}
+                  aria-invalid={!!errors.name}
+                  disabled={isLoading}
+                  className={inputBaseClassName}
+                />
+                {errors.name && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.name}</p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
                 {AUTH_LABELS.EMAIL_LABEL}
@@ -153,11 +243,11 @@ export default function AuthPage() {
                 id="email"
                 type="email"
                 placeholder={AUTH_LABELS.EMAIL_PLACEHOLDER}
-                value={formData.email}
+                value={authFormData.email}
                 onChange={handleInputChange("email")}
                 aria-invalid={!!errors.email}
                 disabled={isLoading}
-                className="h-12 bg-white dark:bg-zinc-800 border-2 border-zinc-200 dark:border-zinc-700 focus:border-cyan-500 focus:ring-cyan-500 rounded-lg"
+                className={inputBaseClassName}
               />
               {errors.email && (
                 <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.email}</p>
@@ -172,11 +262,11 @@ export default function AuthPage() {
                 id="password"
                 type="password"
                 placeholder={AUTH_LABELS.PASSWORD_PLACEHOLDER}
-                value={formData.password}
+                value={authFormData.password}
                 onChange={handleInputChange("password")}
                 aria-invalid={!!errors.password}
                 disabled={isLoading}
-                className="h-12 bg-white dark:bg-zinc-800 border-2 border-zinc-200 dark:border-zinc-700 focus:border-cyan-500 focus:ring-cyan-500 rounded-lg"
+                className={inputBaseClassName}
               />
               {errors.password && (
                 <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.password}</p>
@@ -192,11 +282,11 @@ export default function AuthPage() {
                   id="confirmPassword"
                   type="password"
                   placeholder={AUTH_LABELS.PASSWORD_PLACEHOLDER}
-                  value={formData.confirmPassword}
+                  value={authFormData.confirmPassword}
                   onChange={handleInputChange("confirmPassword")}
                   aria-invalid={!!errors.confirmPassword}
                   disabled={isLoading}
-                  className="h-12 bg-white dark:bg-zinc-800 border-2 border-zinc-200 dark:border-zinc-700 focus:border-cyan-500 focus:ring-cyan-500 rounded-lg"
+                  className={inputBaseClassName}
                 />
                 {errors.confirmPassword && (
                   <p className="text-xs text-red-600 dark:text-red-400 mt-1">
@@ -207,21 +297,10 @@ export default function AuthPage() {
             )}
           </CardContent>
 
-          <CardFooter className="flex flex-col space-y-4 px-8 pb-8 pt-2">
-            {/* Demo Credentials */}
-            {mode === "login" && (
-              <div className="w-full bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-2">
-                <p className="text-xs font-semibold text-blue-900 dark:text-blue-300 mb-1">Demo Credentials:</p>
-                <div className="space-y-1 text-xs text-blue-800 dark:text-blue-400">
-                  <p><span className="font-medium">Email:</span> demo@tripyojana.com</p>
-                  <p><span className="font-medium">Password:</span> Demo@123</p>
-                </div>
-              </div>
-            )}
-            
+          <CardFooter className="flex flex-col space-y-4 px-8 pb-8 pt-2 animate-fade-in animation-delay-800">
             <Button
               type="submit"
-              className="w-full h-12 bg-linear-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg uppercase tracking-wide"
+              className="w-full h-12 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg uppercase tracking-wide hover:scale-[1.01] active:scale-[0.99]"
               disabled={isLoading}
             >
               {isLoading
@@ -240,7 +319,7 @@ export default function AuthPage() {
                   <button
                     type="button"
                     onClick={toggleMode}
-                    className="text-cyan-600 dark:text-cyan-500 hover:text-cyan-700 dark:hover:text-cyan-400 font-bold transition-colors"
+                    className="text-cyan-600 dark:text-cyan-500 hover:text-cyan-700 dark:hover:text-cyan-400 font-bold transition-all duration-200 hover:underline underline-offset-2"
                     disabled={isLoading}
                   >
                     {AUTH_LABELS.SIGN_UP_BUTTON}
@@ -252,7 +331,7 @@ export default function AuthPage() {
                   <button
                     type="button"
                     onClick={toggleMode}
-                    className="text-cyan-600 dark:text-cyan-500 hover:text-cyan-700 dark:hover:text-cyan-400 font-bold transition-colors"
+                    className="text-cyan-600 dark:text-cyan-500 hover:text-cyan-700 dark:hover:text-cyan-400 font-bold transition-all duration-200 hover:underline underline-offset-2"
                     disabled={isLoading}
                   >
                     {AUTH_LABELS.SIGN_IN_BUTTON}

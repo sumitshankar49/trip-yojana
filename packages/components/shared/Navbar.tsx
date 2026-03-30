@@ -18,6 +18,7 @@ import {
   TooltipTrigger,
 } from "@/packages/components/ui/tooltip";
 import { ThemeToggle } from "@/packages/components/shared/ThemeToggle";
+import UserButton from "@/packages/components/auth/UserButton";
 
 interface Notification {
   id: string;
@@ -295,7 +296,7 @@ export default function Navbar() {
             })}
           </motion.div>
 
-          {/* Right Section - Notifications & Profile */}
+          {/* Right Section - Notifications & Auth */}
           <div className="flex items-center gap-2">
             {/* Notifications */}
             <Popover open={isNotificationsOpen} onOpenChange={setIsNotificationsOpen}>
@@ -573,125 +574,7 @@ export default function Navbar() {
             {/* Theme Toggle */}
             <ThemeToggle />
 
-            {/* Profile Dropdown */}
-            <Popover>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <motion.div
-                      whileHover={{ scale: 1.1, rotate: 360 }}
-                      whileTap={{ scale: 0.9 }}
-                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                    >
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="rounded-full hover:shadow-md"
-                        aria-label="User profile"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-linear-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold text-sm">
-                          SS
-                        </div>
-                      </Button>
-                    </motion.div>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Sumit Shankar</p>
-                </TooltipContent>
-              </Tooltip>
-
-              <PopoverContent className="w-72 p-0" align="end" asChild>
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                  transition={{ duration: 0.2 }}
-                >
-                <div className="p-4 border-b border-zinc-200 dark:border-zinc-700">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-linear-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold text-lg">
-                      SS
-                    </div>
-                    <div>
-                      <p className="font-semibold text-zinc-900 dark:text-zinc-50">Sumit Shankar</p>
-                      <p className="text-sm text-zinc-600 dark:text-zinc-400">sumit@example.com</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="py-2">
-                 
-                  <motion.button
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors duration-200 flex items-center gap-3"
-                    whileHover={{ x: 4 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <motion.svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="w-4 h-4"
-                      whileHover={{ rotate: 180 }}
-                      // transition={{ duration: 0.3 }}
-                    >
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.25M15.54 15.54l4.24 4.25M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24" />
-                    </motion.svg>
-                    <span>Settings</span>
-                  </motion.button>
-                  <motion.button
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors duration-200 flex items-center gap-3"
-                    whileHover={{ x: 4 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <motion.svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="w-4 h-4"
-                      whileHover={{ scale: 1.2 }}
-                      // transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M12 16v-4M12 8h.01" />
-                    </motion.svg>
-                    <span>Help & Support</span>
-                  </motion.button>
-                  <div className="border-t border-zinc-200 dark:border-zinc-700 my-2"></div>
-                  <motion.button
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 dark:hover:bg-red-950/20 text-red-600 dark:text-red-400 transition-colors duration-200 flex items-center gap-3"
-                    whileHover={{ x: 4 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <motion.svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="w-4 h-4"
-                      whileHover={{ x: 3 }}
-                    >
-                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                      <polyline points="16 17 21 12 16 7" />
-                      <line x1="21" y1="12" x2="9" y2="12" />
-                    </motion.svg>
-                    <span>Logout</span>
-                  </motion.button>
-                </div>
-                </motion.div>
-              </PopoverContent>
-            </Popover>
+            <UserButton />
           </div>
         </div>
       </div>

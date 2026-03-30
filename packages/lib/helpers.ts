@@ -1,7 +1,8 @@
 import { CURRENCY_SYMBOL } from "@/packages/constants/common";
 
 export const formatCurrency = (amount: number, currency: string = "INR"): string => {
-  return `${CURRENCY_SYMBOL}${amount.toLocaleString("en-IN", {
+  const symbol = currency === "INR" ? CURRENCY_SYMBOL : `${currency} `;
+  return `${symbol}${amount.toLocaleString("en-IN", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })}`;

@@ -4,10 +4,17 @@ import { useState, ReactNode, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/packages/components/ui/card";
 import { cn } from "@/packages/lib/utils";
 import Navbar from "@/packages/components/shared/Navbar";
-import { TripFilter } from "@/packages/components/shared/TripFilter";
+import { TripFilter, type TripOption } from "@/packages/components/shared/TripFilter";
 import { motion } from "framer-motion";
 import { CardSkeleton } from "@/packages/components/ui/skeleton";
 import { TRIP_BUDGETS, type CategoryBudget } from "@/packages/constants/tripBudgets";
+import { toast } from "sonner";
+
+type ApiTrip = {
+  _id: string;
+  title: string;
+  places?: string[];
+};
 
 const getCategoryIcon = (categoryName: string): ReactNode => {
   if (categoryName.includes("Transport") || categoryName.includes("Travel")) {
@@ -86,14 +93,69 @@ const getCategoryIcon = (categoryName: string): ReactNode => {
 };
 
 export default function BudgetPage() {
-  const [selectedTripId, setSelectedTripId] = useState("1");
+  const [selectedTripId, setSelectedTripId] = useState("");
+  const [trips, setTrips] = useState<TripOption[]>([]);
+  const [isTripsLoading, setIsTripsLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
-  
-  const currentTripBudget = TRIP_BUDGETS[selectedTripId];
+
+  const fallbackBudget = TRIP_BUDGETS[Object.keys(TRIP_BUDGETS)[0]];
+  const currentTripBudget = TRIP_BUDGETS[selectedTripId] || fallbackBudget;
+  const selectedTrip = trips.find((trip) => trip.id === selectedTripId);
+
   const budgetData = currentTripBudget.categories.map(cat => ({
     ...cat,
     icon: getCategoryIcon(cat.name)
   }));
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTrips = async () => {
+      try {
+        const response = await fetch("/api/trips", { cache: "no-store" });
+        const data = await response.json();
+
+        if (!response.ok) {
+          toast.error(data?.message || "Failed to load trips");
+          if (isMounted) {
+            setTrips([]);
+            setSelectedTripId("");
+          }
+          return;
+        }
+
+        const apiTrips = Array.isArray(data?.trips) ? (data.trips as ApiTrip[]) : [];
+        const mappedTrips: TripOption[] = apiTrips.map((trip) => ({
+          id: String(trip._id),
+          destination: trip.places?.[0] || trip.title,
+        }));
+
+        if (!isMounted) {
+          return;
+        }
+
+        setTrips(mappedTrips);
+        setSelectedTripId(mappedTrips[0]?.id || "");
+      } catch (error) {
+        console.error("Budget trips load error:", error);
+        toast.error("Could not load trips");
+        if (isMounted) {
+          setTrips([]);
+          setSelectedTripId("");
+        }
+      } finally {
+        if (isMounted) {
+          setIsTripsLoading(false);
+        }
+      }
+    };
+
+    loadTrips();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -163,13 +225,15 @@ export default function BudgetPage() {
               Budget Tracker
             </h1>
             <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-              {currentTripBudget.tripName} - {currentTripBudget.dates}
+              {selectedTrip?.destination || currentTripBudget.tripName} - {currentTripBudget.dates}
             </p>
           </div>
           <div className="w-64">
             <TripFilter
               selectedTripId={selectedTripId}
               onTripChange={setSelectedTripId}
+              trips={trips}
+              isLoading={isTripsLoading}
             />
           </div>
         </motion.div>
