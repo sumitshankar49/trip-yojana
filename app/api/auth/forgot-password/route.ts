@@ -6,7 +6,7 @@ import { sendOTPEmail } from "@/backend/lib/mailer";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  // Check email service config eagerly before doing any DB work
+    // Check email service config eagerly before doing any DB work
   if (!process.env.RESEND_API_KEY) {
     console.error("[forgot-password] Missing env var: RESEND_API_KEY");
     return NextResponse.json(
