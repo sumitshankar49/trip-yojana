@@ -9,22 +9,8 @@ import { motion } from "framer-motion";
 import { CardSkeleton } from "@/packages/components/ui/skeleton";
 
 import { toast } from "sonner";
-import { BUDGET_LABELS, BUDGET_MESSAGES } from "./constants";
-
-const getProgressColor = (percentage: number) => {
-  if (percentage >= 90) return "bg-red-500";
-  if (percentage >= 70) return "bg-amber-500";
-  return "bg-emerald-500";
-};
-
-type ApiTrip = {
-  _id: string;
-  title: string;
-  budget: number;
-  places?: string[];
-  startDate: string;
-  endDate: string;
-};
+import { BUDGET_LABELS, BUDGET_MESSAGES, getProgressColor } from "./constants";
+import type { ApiTrip } from "./types";
 
 
 export default function BudgetPage() {
@@ -273,7 +259,7 @@ export default function BudgetPage() {
                     {formatCurrency(totalSpent)}
                   </motion.div>
                   <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
-                    {spentPercentage.toFixed(1)}% of budget used
+                    {spentPercentage.toFixed(1)}% of {BUDGET_LABELS.TOTAL_BUDGET_LABEL.toLowerCase()} used
                   </p>
                 </CardContent>
               </Card>
@@ -371,9 +357,9 @@ export default function BudgetPage() {
                 <rect x="2" y="4" width="20" height="16" rx="2" />
                 <path d="M7 15h0M2 9.5h20" />
               </svg>
-              <p className="text-zinc-500 dark:text-zinc-400 font-medium">No category budgets yet</p>
+              <p className="text-zinc-500 dark:text-zinc-400 font-medium">{BUDGET_LABELS.NO_CATEGORY_BUDGETS}</p>
               <p className="text-sm text-zinc-400 dark:text-zinc-500 mt-1">
-                Add expenses to track spending by category
+                {BUDGET_LABELS.NO_CATEGORY_DESC}
               </p>
             </CardContent>
           </Card>
@@ -382,7 +368,7 @@ export default function BudgetPage() {
         {/* Simple Spending Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Spending Distribution</CardTitle>
+            <CardTitle>{BUDGET_LABELS.SPENDING_DISTRIBUTION_TITLE}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center justify-center py-10 text-center">
@@ -401,9 +387,9 @@ export default function BudgetPage() {
                 <path d="M13 17V5" />
                 <path d="M8 17v-3" />
               </svg>
-              <p className="text-zinc-500 dark:text-zinc-400 font-medium">No spending data yet</p>
+              <p className="text-zinc-500 dark:text-zinc-400 font-medium">{BUDGET_LABELS.NO_SPENDING_DATA}</p>
               <p className="text-sm text-zinc-400 dark:text-zinc-500 mt-1">
-                Your spending breakdown will appear here once you add expenses
+                {BUDGET_LABELS.NO_SPENDING_DESC}
               </p>
             </div>
           </CardContent>
