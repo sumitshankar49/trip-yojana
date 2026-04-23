@@ -22,6 +22,7 @@ export default function AuthPage() {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [serverError, setServerError] = useState("");
   
   const [authFormData, setAuthFormData] = useState({
     name: "",
@@ -89,7 +90,7 @@ export default function AuthPage() {
         const data = await response.json();
 
         if (!response.ok) {
-          toast.error(data.message || "Registration failed");
+          setServerError(data.message || "Registration failed");
           setIsLoading(false);
           return;
         }
@@ -101,6 +102,7 @@ export default function AuthPage() {
         router.replace("/auth?mode=login");
         setAuthFormData({ name: "", email: authFormData.email, password: "", confirmPassword: "" });
         setErrors({});
+        setServerError("");
         setIsLoading(false);
       } else {
         // Login existing user
@@ -111,7 +113,11 @@ export default function AuthPage() {
         });
 
         if (result?.error) {
-          toast.error(result.error);
+          const msg =
+            result.error === "CredentialsSignin"
+              ? "Invalid email or password"
+              : result.error;
+          setServerError(msg);
           setIsLoading(false);
           return;
         }
@@ -140,6 +146,7 @@ export default function AuthPage() {
     setMode(nextMode);
     router.replace(`/auth?mode=${nextMode}`);
     setErrors({});
+    setServerError("");
     setAuthFormData({ name: "", email: "", password: "", confirmPassword: "" });
   };
 
@@ -147,10 +154,11 @@ export default function AuthPage() {
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     setAuthFormData((prev) => ({ ...prev, [field]: e.target.value }));
-    // Clear error for this field when user starts typing
+    // Clear field and server error when user starts typing
     if (errors[field as keyof FormErrors]) {
       setErrors((prev) => ({ ...prev, [field]: undefined }));
     }
+    if (serverError) setServerError("");
   };
 
   return (
@@ -304,6 +312,12 @@ export default function AuthPage() {
           </CardContent>
 
           <CardFooter className="flex flex-col space-y-4 px-8 pb-8 pt-2 animate-fade-in animation-delay-800">
+            {serverError && (
+              <div className="w-full flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950/30">
+                <svg xmlns="http://www.w3.org/2000/svg" className="mt-0.5 h-4 w-4 shrink-0 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <p className="text-sm font-medium text-red-700 dark:text-red-400">{serverError}</p>
+              </div>
+            )}
             <Button
               type="submit"
               className="w-full h-12 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg uppercase tracking-wide hover:scale-[1.01] active:scale-[0.99]"

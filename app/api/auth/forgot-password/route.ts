@@ -55,7 +55,8 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    console.error("Forgot password error:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[forgot-password] Error:", message);
     return NextResponse.json(
       { success: false, message: "Failed to send OTP. Please try again." },
       { status: 500 }

@@ -95,7 +95,7 @@ export default function ForgotPasswordPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.message || ERROR_MESSAGES.sendOtpFailed);
+        setErrors({ email: data.message || ERROR_MESSAGES.sendOtpFailed });
         setIsLoading(false);
         return;
       }
@@ -135,7 +135,6 @@ export default function ForgotPasswordPage() {
       if (!res.ok) {
         const errorMsg = data.message || ERROR_MESSAGES.otpInvalid;
         setErrors({ otp: errorMsg });
-        toast.error(errorMsg);
         setIsLoading(false);
         return;
       }
@@ -181,7 +180,6 @@ export default function ForgotPasswordPage() {
       if (!res.ok) {
         const errorMsg = data.message || ERROR_MESSAGES.resetFailed;
         setErrors({ form: errorMsg });
-        toast.error(errorMsg);
         setIsLoading(false);
         return;
       }

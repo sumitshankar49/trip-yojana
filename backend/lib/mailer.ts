@@ -13,14 +13,23 @@ function getLogoBase64(): string {
 }
 
 function getTransporter() {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
+
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+    throw new Error(
+      `Missing SMTP configuration. Required: SMTP_HOST, SMTP_USER, SMTP_PASS. ` +
+      `Got: SMTP_HOST=${SMTP_HOST ? "set" : "missing"}, SMTP_USER=${SMTP_USER ? "set" : "missing"}, SMTP_PASS=${SMTP_PASS ? "set" : "missing"}`
+    );
+  }
+
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
+    host: SMTP_HOST,
+    port: Number(SMTP_PORT) || 587,
     secure: false,
     requireTLS: true,
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      user: SMTP_USER,
+      pass: SMTP_PASS,
     },
   });
 }
