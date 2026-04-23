@@ -6,11 +6,9 @@ import { sendOTPEmail } from "@/backend/lib/mailer";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  // Check SMTP config eagerly before doing any DB work
-  const smtpVars = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"] as const;
-  const missingSmtp = smtpVars.filter((v) => !process.env[v]);
-  if (missingSmtp.length > 0) {
-    console.error(`[forgot-password] Missing env vars: ${missingSmtp.join(", ")}`);
+  // Check email service config eagerly before doing any DB work
+  if (!process.env.RESEND_API_KEY) {
+    console.error("[forgot-password] Missing env var: RESEND_API_KEY");
     return NextResponse.json(
       { success: false, message: "Email service is not configured. Contact support." },
       { status: 500 }

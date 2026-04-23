@@ -18,7 +18,10 @@ async function connectDB(): Promise<void> {
       throw new Error("MONGODB_URI environment variable is not set");
     }
 
-    const db = await mongoose.connect(process.env.MONGODB_URI);
+    const db = await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 8000,
+    });
 
     connection.isConnected = db.connections[0].readyState;
 
