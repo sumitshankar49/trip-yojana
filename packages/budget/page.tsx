@@ -11,6 +11,12 @@ import { CardSkeleton } from "@/packages/components/ui/skeleton";
 import { toast } from "sonner";
 import { BUDGET_LABELS, BUDGET_MESSAGES } from "./constants";
 
+const getProgressColor = (percentage: number) => {
+  if (percentage >= 90) return "bg-red-500";
+  if (percentage >= 70) return "bg-amber-500";
+  return "bg-emerald-500";
+};
+
 type ApiTrip = {
   _id: string;
   title: string;
@@ -114,12 +120,6 @@ export default function BudgetPage() {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
-  };
-
-  const getProgressColor = (percentage: number) => {
-    if (percentage >= 90) return "bg-red-500";
-    if (percentage >= 70) return "bg-amber-500";
-    return "bg-emerald-500";
   };
 
   const containerVariants = {
