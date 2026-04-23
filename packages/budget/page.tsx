@@ -116,6 +116,12 @@ export default function BudgetPage() {
     }).format(amount);
   };
 
+  const getProgressColor = (percentage: number) => {
+    if (percentage >= 90) return "bg-red-500";
+    if (percentage >= 70) return "bg-amber-500";
+    return "bg-emerald-500";
+  };
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
