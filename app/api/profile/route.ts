@@ -7,7 +7,7 @@ import User from "@/backend/models/User";
 export async function GET(req: NextRequest) {
   try {
     // Get user from token
-    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+    const token = await getToken({ req, secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET });
     
     if (!token || !token.email) {
       return NextResponse.json(
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     // Get user from token
-    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+    const token = await getToken({ req, secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET });
     
     if (!token || !token.email) {
       return NextResponse.json(

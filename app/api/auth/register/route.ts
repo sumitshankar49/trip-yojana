@@ -60,9 +60,13 @@ export async function POST(req: NextRequest) {
     });
 
     // Send welcome email (non-blocking — don't fail registration if email fails)
-    sendWelcomeEmail(newUser.email, newUser.name || "").catch((err) =>
-      console.error("Welcome email error:", err)
-    );
+    try {
+      sendWelcomeEmail(newUser.email, newUser.name || "").catch((err) =>
+        console.error("Welcome email error:", err)
+      );
+    } catch (emailErr) {
+      console.error("Welcome email setup error:", emailErr);
+    }
 
     // Return success response (exclude password)
     return NextResponse.json(
