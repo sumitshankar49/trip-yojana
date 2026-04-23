@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import connectDB from "@/backend/config/db";
 import User from "@/backend/models/User";
+import { sendWelcomeEmail } from "@/backend/lib/mailer";
 
 export const runtime = "nodejs";
 
@@ -57,6 +58,11 @@ export async function POST(req: NextRequest) {
       password: hashedPassword,
       name: name || "",
     });
+
+    // Send welcome email (non-blocking — don't fail registration if email fails)
+    sendWelcomeEmail(newUser.email, newUser.name || "").catch((err) =>
+      console.error("Welcome email error:", err)
+    );
 
     // Return success response (exclude password)
     return NextResponse.json(

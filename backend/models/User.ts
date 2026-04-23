@@ -7,6 +7,8 @@ export interface IUser extends Document {
   phone?: string;
   profilePhoto?: string;
   city?: string;
+  resetOTP?: string;
+  resetOTPExpiry?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,6 +46,13 @@ const UserSchema: Schema<IUser> = new Schema(
     city: {
       type: String,
       trim: true,
+    },
+    resetOTP: {
+      type: String,
+      trim: true,
+    },
+    resetOTPExpiry: {
+      type: Date,
     },
   },
   {

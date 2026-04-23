@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, FormEvent } from "react";
+import { useState, FormEvent } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
@@ -16,7 +16,10 @@ import { validateName, validateEmail, validatePassword, validateConfirmPassword 
 export default function AuthPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<AuthMode>("login");
+  const requestedMode = searchParams.get("mode");
+  const [mode, setMode] = useState<AuthMode>(
+    requestedMode === "signup" || requestedMode === "login" ? requestedMode : "login"
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   
@@ -28,13 +31,6 @@ export default function AuthPage() {
   });
 
   const inputBaseClassName = "h-12 bg-white dark:bg-zinc-800 border-2 border-zinc-200 dark:border-zinc-700 focus:border-cyan-500 focus:ring-cyan-500 rounded-lg transition-all duration-300 focus:scale-[1.01]";
-
-  useEffect(() => {
-    const requestedMode = searchParams.get("mode");
-    if (requestedMode === "signup" || requestedMode === "login") {
-      setMode(requestedMode);
-    }
-  }, [searchParams]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -255,9 +251,19 @@ export default function AuthPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
-                {AUTH_LABELS.PASSWORD_LABEL}
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
+                  {AUTH_LABELS.PASSWORD_LABEL}
+                </Label>
+                {mode === "login" && (
+                  <a
+                    href="/forgot-password"
+                    className="text-xs text-cyan-600 dark:text-cyan-500 hover:text-cyan-700 dark:hover:text-cyan-400 font-semibold hover:underline underline-offset-2 transition-colors duration-200"
+                  >
+                    Forgot password?
+                  </a>
+                )}
+              </div>
               <Input
                 id="password"
                 type="password"

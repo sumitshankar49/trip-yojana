@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/packages/hooks/useAuth";
 import AuthLoading from "@/packages/components/auth/AuthLoading";
 import { Trip } from "./types";
-import { DASHBOARD_LABELS } from "./constants";
+import { DASHBOARD_LABELS, DASHBOARD_MESSAGES } from "./constants";
 import { formatDate, formatCurrency } from "./helpers";
 
 type ApiTrip = {
@@ -67,7 +67,7 @@ export default function DashboardPage() {
         const data = await response.json();
 
         if (!response.ok) {
-          toast.error(data?.message || "Failed to load trips");
+          toast.error(data?.message || DASHBOARD_MESSAGES.LOAD_TRIPS_FAILED);
           if (isMounted) {
             setTrips([]);
           }
@@ -80,7 +80,7 @@ export default function DashboardPage() {
         }
       } catch (error) {
         console.error("Dashboard trips load error:", error);
-        toast.error("Could not load trips");
+        toast.error(DASHBOARD_MESSAGES.LOAD_TRIPS_ERROR);
         if (isMounted) {
           setTrips([]);
         }
@@ -100,7 +100,7 @@ export default function DashboardPage() {
 
   const handleTripClick = (tripName: string) => {
     toast.success(`Opening ${tripName}`, {
-      description: "Loading trip details..."
+      description: DASHBOARD_MESSAGES.OPENING_TRIP_DESC
     });
   };
 
@@ -175,7 +175,7 @@ export default function DashboardPage() {
           >
             {/* Total Trips Card */}
             <StatCard
-              label="Total Trips"
+              label={DASHBOARD_LABELS.TOTAL_TRIPS_LABEL}
               value={totalTrips}
               isLoading={isLoading}
               icon={
@@ -199,7 +199,7 @@ export default function DashboardPage() {
 
             {/* Upcoming Trips Card */}
             <StatCard
-              label="Upcoming Trips"
+              label={DASHBOARD_LABELS.UPCOMING_TRIPS_LABEL}
               value={upcomingTrips}
               isLoading={isLoading}
               icon={
@@ -225,7 +225,7 @@ export default function DashboardPage() {
 
             {/* Total Budget Card */}
             <StatCard
-              label="Total Budget"
+              label={DASHBOARD_LABELS.TOTAL_BUDGET_LABEL}
               value={formatCurrency(totalBudget, "INR")}
               isLoading={isLoading}
               loadingWidth="w-20"
@@ -292,7 +292,7 @@ export default function DashboardPage() {
           className="mb-8 flex justify-center"
         >
           <SearchBar
-            placeholder="Search trips, places..."
+            placeholder={DASHBOARD_LABELS.SEARCH_PLACEHOLDER}
             onSearch={setSearchQuery}
             className="w-full max-w-2xl"
           />

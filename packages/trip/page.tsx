@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/packages/components/u
 import { cn } from "@/packages/lib/utils";
 import { toast } from "sonner";
 import ProtectedRoute from "@/packages/components/auth/ProtectedRoute";
+import { TRIP_LABELS, TRIP_MESSAGES, TRIP_ERRORS } from "./constants";
 
 interface TripFormData {
   source: string;
@@ -27,9 +28,9 @@ interface TripFormData {
 type Step = 1 | 2 | 3;
 
 const stepMeta: { step: Step; label: string; hint: string }[] = [
-  { step: 1, label: "Location", hint: "Route" },
-  { step: 2, label: "Dates", hint: "Schedule" },
-  { step: 3, label: "Details", hint: "Preferences" },
+  { step: 1, label: TRIP_LABELS.STEP_1_LABEL, hint: TRIP_LABELS.STEP_1_HINT },
+  { step: 2, label: TRIP_LABELS.STEP_2_LABEL, hint: TRIP_LABELS.STEP_2_HINT },
+  { step: 3, label: TRIP_LABELS.STEP_3_LABEL, hint: TRIP_LABELS.STEP_3_HINT },
 ];
 
 export default function CreateTripPage() {
@@ -61,7 +62,7 @@ export default function CreateTripPage() {
       : 0;
 
   const formatDate = (date: Date | undefined) => {
-    if (!date) return "Pick a date";
+    if (!date) return TRIP_LABELS.PICK_A_DATE;
     return date.toLocaleDateString("en-US", { 
       month: "short", 
       day: "numeric",
@@ -74,31 +75,31 @@ export default function CreateTripPage() {
 
     if (step === 1) {
       if (!formData.source.trim()) {
-        newErrors.source = "Source is required";
+        newErrors.source = TRIP_ERRORS.SOURCE_REQUIRED;
       }
       if (!formData.destination.trim()) {
-        newErrors.destination = "Destination is required";
+        newErrors.destination = TRIP_ERRORS.DESTINATION_REQUIRED;
       }
       if (
         formData.source.trim() &&
         formData.destination.trim() &&
         formData.source.trim().toLowerCase() === formData.destination.trim().toLowerCase()
       ) {
-        newErrors.destination = "Destination must be different from source";
+        newErrors.destination = TRIP_ERRORS.DESTINATION_SAME;
       }
     } else if (step === 2) {
       if (!formData.startDate) {
-        newErrors.startDate = "Start date is required";
+        newErrors.startDate = TRIP_ERRORS.START_DATE_REQUIRED;
       }
       if (!formData.endDate) {
-        newErrors.endDate = "End date is required";
+        newErrors.endDate = TRIP_ERRORS.END_DATE_REQUIRED;
       }
       if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
-        newErrors.endDate = "End date must be after start date";
+        newErrors.endDate = TRIP_ERRORS.END_DATE_BEFORE_START;
       }
     } else if (step === 3) {
       if (!formData.travelType) {
-        newErrors.travelType = "Travel type is required";
+        newErrors.travelType = TRIP_ERRORS.TRAVEL_TYPE_REQUIRED;
       }
     }
 
@@ -125,7 +126,7 @@ export default function CreateTripPage() {
 
   const handleSubmit = async () => {
     if (!formData.startDate || !formData.endDate) {
-      toast.error("Please select both start and end dates");
+      toast.error(TRIP_MESSAGES.DATES_REQUIRED);
       return;
     }
 
@@ -149,16 +150,16 @@ export default function CreateTripPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        toast.error(data?.message || "Failed to create trip");
+        toast.error(data?.message || TRIP_MESSAGES.CREATE_FAILED);
         return;
       }
 
-      toast.success("Trip created successfully");
+      toast.success(TRIP_MESSAGES.TRIP_CREATED);
       router.push("/dashboard");
       router.refresh();
     } catch (error) {
       console.error("Create trip error:", error);
-      toast.error("Something went wrong while creating trip");
+      toast.error(TRIP_MESSAGES.GENERIC_ERROR);
     } finally {
       setIsSubmitting(false);
     }
@@ -196,10 +197,10 @@ export default function CreateTripPage() {
 
           <div className="mb-8">
             <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-4xl">
-              Create New Trip
+              {TRIP_LABELS.PAGE_TITLE}
             </h1>
             <p className="mt-2 max-w-2xl text-zinc-600 dark:text-zinc-400">
-              Build your itinerary in three guided steps with real-time validation and instant dashboard sync.
+              {TRIP_LABELS.PAGE_DESCRIPTION}
             </p>
           </div>
 
@@ -268,19 +269,19 @@ export default function CreateTripPage() {
           <Card className="border-zinc-200/70 bg-white/90 shadow-xl shadow-zinc-200/40 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/85 dark:shadow-black/20">
             <CardHeader className="border-b border-zinc-100 pb-5 dark:border-zinc-800">
               <div className="mb-2 inline-flex w-fit items-center rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                {currentStep === 1 && "Step 1: Route"}
-                {currentStep === 2 && "Step 2: Travel Window"}
-                {currentStep === 3 && "Step 3: Preferences"}
+                {currentStep === 1 && TRIP_LABELS.STEP_1_BADGE}
+                {currentStep === 2 && TRIP_LABELS.STEP_2_BADGE}
+                {currentStep === 3 && TRIP_LABELS.STEP_3_BADGE}
               </div>
             <CardTitle>
-              {currentStep === 1 && "Where are you traveling?"}
-              {currentStep === 2 && "When is your trip?"}
-              {currentStep === 3 && "Trip details"}
+              {currentStep === 1 && TRIP_LABELS.STEP_1_TITLE}
+              {currentStep === 2 && TRIP_LABELS.STEP_2_TITLE}
+              {currentStep === 3 && TRIP_LABELS.STEP_3_TITLE}
             </CardTitle>
             <CardDescription>
-              {currentStep === 1 && "Enter your departure and destination locations"}
-              {currentStep === 2 && "Select your travel dates"}
-              {currentStep === 3 && "Set your budget and travel preferences"}
+              {currentStep === 1 && TRIP_LABELS.STEP_1_DESC}
+              {currentStep === 2 && TRIP_LABELS.STEP_2_DESC}
+              {currentStep === 3 && TRIP_LABELS.STEP_3_DESC}
             </CardDescription>
             </CardHeader>
 
@@ -289,32 +290,32 @@ export default function CreateTripPage() {
             {currentStep === 1 && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="source">Source</Label>
+                  <Label htmlFor="source">{TRIP_LABELS.SOURCE_LABEL}</Label>
                   <Input
                     id="source"
-                    placeholder="Ex: Delhi"
+                    placeholder={TRIP_LABELS.SOURCE_PLACEHOLDER}
                     value={formData.source}
                     onChange={(e) => updateFormData("source", e.target.value)}
                     aria-invalid={!!errors.source}
                     className="h-11"
                   />
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Where your journey starts.</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{TRIP_LABELS.SOURCE_HINT}</p>
                   {errors.source && (
                     <p className="text-sm text-destructive">{errors.source}</p>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="destination">Destination</Label>
+                  <Label htmlFor="destination">{TRIP_LABELS.DESTINATION_LABEL}</Label>
                   <Input
                     id="destination"
-                    placeholder="Ex: Goa"
+                    placeholder={TRIP_LABELS.DESTINATION_PLACEHOLDER}
                     value={formData.destination}
                     onChange={(e) => updateFormData("destination", e.target.value)}
                     aria-invalid={!!errors.destination}
                     className="h-11"
                   />
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Where you want to travel.</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{TRIP_LABELS.DESTINATION_HINT}</p>
                   {errors.destination && (
                     <p className="text-sm text-destructive">{errors.destination}</p>
                   )}
@@ -326,7 +327,7 @@ export default function CreateTripPage() {
             {currentStep === 2 && (
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Start Date</Label>
+                  <Label>{TRIP_LABELS.START_DATE_LABEL}</Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
@@ -370,7 +371,7 @@ export default function CreateTripPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>End Date</Label>
+                  <Label>{TRIP_LABELS.END_DATE_LABEL}</Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
@@ -432,39 +433,39 @@ export default function CreateTripPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label>Budget</Label>
+                      <Label>{TRIP_LABELS.BUDGET_LABEL}</Label>
                       <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                        ${formData.budget.toLocaleString()}
+                        ₹{formData.budget.toLocaleString("en-IN")}
                       </span>
                     </div>
                     <Slider
                       value={[formData.budget]}
                       onValueChange={([value]) => updateFormData("budget", value)}
-                      min={500}
-                      max={10000}
-                      step={100}
+                      min={5000}
+                      max={500000}
+                      step={1000}
                       className="py-4"
                     />
                     <div className="flex justify-between text-xs text-zinc-600 dark:text-zinc-400">
-                      <span>$500</span>
-                      <span>$10,000</span>
+                      <span>{TRIP_LABELS.BUDGET_MIN_LABEL}</span>
+                      <span>{TRIP_LABELS.BUDGET_MAX_LABEL}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="travelType">Travel Type</Label>
+                  <Label htmlFor="travelType">{TRIP_LABELS.TRAVEL_TYPE_LABEL}</Label>
                   <Select
                     value={formData.travelType}
                     onValueChange={(value) => updateFormData("travelType", value)}
                   >
                     <SelectTrigger id="travelType" aria-invalid={!!errors.travelType}>
-                      <SelectValue placeholder="Select travel type" />
+                      <SelectValue placeholder={TRIP_LABELS.TRAVEL_TYPE_PLACEHOLDER} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="solo">Solo Travel</SelectItem>
-                      <SelectItem value="family">Family Trip</SelectItem>
-                      <SelectItem value="friends">Trip with Friends</SelectItem>
+                      <SelectItem value="solo">{TRIP_LABELS.SOLO}</SelectItem>
+                      <SelectItem value="family">{TRIP_LABELS.FAMILY}</SelectItem>
+                      <SelectItem value="friends">{TRIP_LABELS.FRIENDS}</SelectItem>
                     </SelectContent>
                   </Select>
                   {errors.travelType && (
@@ -475,18 +476,18 @@ export default function CreateTripPage() {
                 {/* Summary */}
                 <div className="mt-6 p-4 rounded-lg bg-zinc-100 dark:bg-zinc-900 space-y-2">
                   <h4 className="font-semibold text-sm text-zinc-900 dark:text-zinc-50">
-                    Trip Summary
+                    {TRIP_LABELS.TRIP_SUMMARY_TITLE}
                   </h4>
                   <div className="space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-                    <p><span className="font-medium">From:</span> {formData.source || "Not set"}</p>
-                    <p><span className="font-medium">To:</span> {formData.destination || "Not set"}</p>
+                    <p><span className="font-medium">{TRIP_LABELS.SUMMARY_FROM}</span> {formData.source || TRIP_LABELS.NOT_SET}</p>
+                    <p><span className="font-medium">{TRIP_LABELS.SUMMARY_TO}</span> {formData.destination || TRIP_LABELS.NOT_SET}</p>
                     <p>
                       <span className="font-medium">Dates:</span>{" "}
                       {formData.startDate && formData.endDate
                         ? `${formatDate(formData.startDate)} - ${formatDate(formData.endDate)}`
                         : "Not set"}
                     </p>
-                    <p><span className="font-medium">Budget:</span> ${formData.budget.toLocaleString()}</p>
+                    <p><span className="font-medium">{TRIP_LABELS.SUMMARY_BUDGET}</span> ₹{formData.budget.toLocaleString("en-IN")}</p>
                     {totalDays > 0 && (
                       <p><span className="font-medium">Duration:</span> {totalDays} {totalDays === 1 ? "day" : "days"}</p>
                     )}
@@ -522,12 +523,12 @@ export default function CreateTripPage() {
                 <line x1="19" y1="12" x2="5" y2="12" />
                 <polyline points="12 19 5 12 12 5" />
               </svg>
-              Back
+              {TRIP_LABELS.BACK_BUTTON}
             </Button>
             <Button onClick={handleNext} disabled={isSubmitting} className="w-full sm:w-auto bg-sky-600 hover:bg-sky-700 text-white">
               {currentStep === 3 ? (
                 <>
-                  {isSubmitting ? "Creating..." : "Create Trip"}
+                  {isSubmitting ? TRIP_LABELS.CREATING_BUTTON : TRIP_LABELS.CREATE_TRIP_BUTTON}
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
@@ -543,20 +544,7 @@ export default function CreateTripPage() {
                 </>
               ) : (
                 <>
-                  Next
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="ml-2 h-4 w-4"
-                  >
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                    <polyline points="12 5 19 12 12 19" />
-                  </svg>
+                  {TRIP_LABELS.NEXT_BUTTON}
                 </>
               )}
             </Button>

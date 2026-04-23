@@ -14,6 +14,7 @@ import { Badge } from "@/packages/components/ui/badge";
 import { cn } from "@/packages/lib/utils";
 import { toast } from "@/packages/lib/toast";
 import type { Place } from "@/packages/map/types";
+import { ITINERARY_LABELS, ITINERARY_MESSAGES } from "./constants";
 
 type ItineraryMapProps = {
   places: Place[];
@@ -95,7 +96,7 @@ const ItineraryMap = dynamic<ItineraryMapProps>(
     ssr: false,
     loading: () => (
       <div className="flex h-130 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-100 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-        Loading map...
+        {ITINERARY_LABELS.MAP_LOADING}
       </div>
     ),
   }
@@ -566,7 +567,7 @@ export default function ItineraryPage() {
         const data = await response.json();
 
         if (!response.ok) {
-          toast.error(data?.message || "Failed to load trips");
+          toast.error(data?.message || ITINERARY_MESSAGES.LOAD_TRIPS_FAILED);
           if (isMounted) {
             setTrips([]);
           }
@@ -595,7 +596,7 @@ export default function ItineraryPage() {
         }
       } catch (error) {
         console.error("Load trips error:", error);
-        toast.error("Could not load trips");
+        toast.error(ITINERARY_MESSAGES.LOAD_TRIPS_ERROR);
       } finally {
         if (isMounted) {
           setIsTripsLoading(false);
@@ -632,7 +633,7 @@ export default function ItineraryPage() {
         const data = await response.json();
 
         if (!response.ok) {
-          toast.error(data?.message || "Failed to load itinerary");
+          toast.error(data?.message || ITINERARY_MESSAGES.LOAD_ITINERARY_FAILED);
           return;
         }
 
@@ -649,7 +650,7 @@ export default function ItineraryPage() {
         }
       } catch (error) {
         console.error("Load itinerary error:", error);
-        toast.error("Could not load itinerary");
+        toast.error(ITINERARY_MESSAGES.LOAD_ITINERARY_ERROR);
       } finally {
         if (isMounted) {
           setIsLoadingItinerary(false);
@@ -715,12 +716,12 @@ export default function ItineraryPage() {
   const handleGenerate = () => {
     const cleanDestination = destination.trim();
     if (!cleanDestination) {
-      toast.error("Destination is required");
+      toast.error(ITINERARY_MESSAGES.DESTINATION_REQUIRED);
       return;
     }
 
     if (days < 1 || days > 14) {
-      toast.error("Days must be between 1 and 14");
+      toast.error(ITINERARY_MESSAGES.DAYS_OUT_OF_RANGE);
       return;
     }
 
@@ -734,17 +735,17 @@ export default function ItineraryPage() {
       return;
     }
 
-    toast.success("Optimized itinerary generated successfully");
+    toast.success(ITINERARY_MESSAGES.GENERATED_SUCCESS);
   };
 
   const saveItinerary = useCallback(async (source: "manual" | "auto") => {
     if (!selectedTripId) {
-      toast.error("Select a trip first");
+      toast.error(ITINERARY_MESSAGES.SELECT_TRIP_FIRST);
       return false;
     }
 
     if (dayPlans.length === 0) {
-      toast.error("Generate itinerary before saving");
+      toast.error(ITINERARY_MESSAGES.GENERATE_BEFORE_SAVE);
       return false;
     }
 
@@ -768,12 +769,12 @@ export default function ItineraryPage() {
 
       const data = await response.json();
       if (!response.ok) {
-        toast.error(data?.message || "Failed to save itinerary");
+        toast.error(data?.message || ITINERARY_MESSAGES.SAVE_FAILED);
         return false;
       }
 
       lastSavedSignatureRef.current = payloadSignature;
-      toast.success(source === "auto" ? "Itinerary auto-saved" : "Itinerary saved to database");
+      toast.success(source === "auto" ? ITINERARY_MESSAGES.AUTO_SAVED : ITINERARY_MESSAGES.SAVED_TO_DB);
       return true;
     } catch (error) {
       console.error("Save itinerary error:", error);
@@ -853,9 +854,9 @@ export default function ItineraryPage() {
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">AI Itinerary Generator</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">{ITINERARY_LABELS.PAGE_TITLE}</h1>
           <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-            Enter destination, days, and interests to generate a day-wise timeline with morning, afternoon, and evening slots.
+            {ITINERARY_LABELS.PAGE_DESCRIPTION}
           </p>
         </div>
 
@@ -892,7 +893,7 @@ export default function ItineraryPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="days">Days</Label>
+                <Label htmlFor="days">{ITINERARY_LABELS.DAYS_LABEL}</Label>
                 <Input
                   id="days"
                   type="number"
@@ -904,7 +905,7 @@ export default function ItineraryPage() {
               </div>
 
               <div className="space-y-3">
-                <Label>Interests</Label>
+                <Label>{ITINERARY_LABELS.INTERESTS_LABEL}</Label>
                 <div className="grid grid-cols-2 gap-2">
                   {INTEREST_OPTIONS.map((item) => (
                     <label
@@ -928,17 +929,17 @@ export default function ItineraryPage() {
 
               <div className="flex gap-2">
                 <Button className="flex-1 bg-cyan-600 text-white hover:bg-cyan-700" onClick={handleGenerate}>
-                  Generate
+                  {ITINERARY_LABELS.GENERATE_BUTTON}
                 </Button>
                 <Button variant="outline" className="flex-1" onClick={handleSave} disabled={isSaving || isAutoSaving || dayPlans.length === 0}>
-                  {isSaving || isAutoSaving ? "Saving..." : "Save"}
+                  {isSaving || isAutoSaving ? ITINERARY_LABELS.SAVING_BUTTON : ITINERARY_LABELS.SAVE_BUTTON}
                 </Button>
               </div>
 
               <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-                Drag and drop timeline cards to reorder slots across days.
+                {ITINERARY_LABELS.DRAG_HINT}
                 <span className="ml-1 font-medium text-zinc-700 dark:text-zinc-300">
-                  Auto-save: {isAutoSaving ? "Saving..." : "On"}
+                  {ITINERARY_LABELS.AUTO_SAVE_LABEL} {isAutoSaving ? ITINERARY_LABELS.AUTO_SAVE_SAVING : ITINERARY_LABELS.AUTO_SAVE_ON}
                 </span>
               </div>
             </CardContent>
@@ -948,13 +949,13 @@ export default function ItineraryPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Card className="border-zinc-200/80 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/85">
                 <CardContent className="p-4">
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Generated Days</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{ITINERARY_LABELS.GENERATED_DAYS_LABEL}</p>
                   <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-50">{dayPlans.length}</p>
                 </CardContent>
               </Card>
               <Card className="border-zinc-200/80 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/85">
                 <CardContent className="p-4">
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Timeline Slots</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{ITINERARY_LABELS.TIMELINE_SLOTS_LABEL}</p>
                   <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-50">{totalActivities}</p>
                 </CardContent>
               </Card>

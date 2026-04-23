@@ -19,6 +19,7 @@ import {
 } from "@/packages/components/ui/dialog";
 import { TripFilter, type TripOption } from "@/packages/components/shared/TripFilter";
 import { toast } from "sonner";
+import { EXPENSE_LABELS, EXPENSE_MESSAGES } from "./constants";
 
 type ApiTrip = {
   _id: string;
@@ -100,7 +101,7 @@ export default function ExpensesPage() {
         const data = await response.json();
 
         if (!response.ok) {
-          toast.error(data?.message || "Failed to load trips");
+          toast.error(data?.message || EXPENSE_MESSAGES.LOAD_TRIPS_FAILED);
           if (isMounted) {
             setTrips([]);
             setSelectedTripId("");
@@ -122,7 +123,7 @@ export default function ExpensesPage() {
         setSelectedTripId(mapped[0]?.id || "");
       } catch (error) {
         console.error("Load trips failed:", error);
-        toast.error("Could not load trips");
+        toast.error(EXPENSE_MESSAGES.LOAD_TRIPS_ERROR);
       } finally {
         if (isMounted) {
           setIsTripsLoading(false);
@@ -225,29 +226,29 @@ export default function ExpensesPage() {
     const email = newMemberEmail.trim().toLowerCase();
 
     if (!selectedTripId) {
-      toast.error("Select a trip first");
+      toast.error(EXPENSE_MESSAGES.SELECT_TRIP_FIRST);
       return;
     }
 
     if (!name) {
-      toast.error("Member name is required");
+      toast.error(EXPENSE_MESSAGES.MEMBER_NAME_REQUIRED);
       return;
     }
 
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
-      toast.error("Valid member email is required");
+      toast.error(EXPENSE_MESSAGES.MEMBER_EMAIL_REQUIRED);
       return;
     }
 
     const exists = members.some((member) => member.name.toLowerCase() === name.toLowerCase());
     if (exists) {
-      toast.error("Member already exists");
+      toast.error(EXPENSE_MESSAGES.MEMBER_ALREADY_EXISTS);
       return;
     }
 
     const emailExists = members.some((member) => member.email.toLowerCase() === email);
     if (emailExists) {
-      toast.error("Email already exists in group");
+      toast.error(EXPENSE_MESSAGES.EMAIL_ALREADY_EXISTS);
       return;
     }
 
@@ -271,7 +272,7 @@ export default function ExpensesPage() {
     setNewMemberName("");
     setNewMemberEmail("");
     setIsAddMemberOpen(false);
-    toast.success("Member added");
+    toast.success(EXPENSE_MESSAGES.MEMBER_ADDED);
   };
 
   const handleRemoveMember = (memberId: string) => {
@@ -281,13 +282,13 @@ export default function ExpensesPage() {
 
     const hasExpense = expenses.some((expense) => expense.paidBy === memberId);
     if (hasExpense) {
-      toast.error("Cannot remove member with existing expenses");
+      toast.error(EXPENSE_MESSAGES.CANNOT_REMOVE_MEMBER);
       return;
     }
 
     const memberToRemove = members.find((member) => member.id === memberId);
     if (memberToRemove?.isOwner) {
-      toast.error("Trip owner cannot be removed");
+      toast.error(EXPENSE_MESSAGES.CANNOT_REMOVE_OWNER);
       return;
     }
 
@@ -303,7 +304,7 @@ export default function ExpensesPage() {
 
   const handleAddExpense = () => {
     if (!selectedTripId) {
-      toast.error("Select a trip first");
+      toast.error(EXPENSE_MESSAGES.SELECT_TRIP_FIRST);
       return;
     }
 
@@ -311,17 +312,17 @@ export default function ExpensesPage() {
     const amount = Number(expenseAmount);
 
     if (!title) {
-      toast.error("Expense title is required");
+      toast.error(EXPENSE_MESSAGES.EXPENSE_TITLE_REQUIRED);
       return;
     }
 
     if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Enter a valid amount");
+      toast.error(EXPENSE_MESSAGES.INVALID_AMOUNT);
       return;
     }
 
     if (!expensePaidBy) {
-      toast.error("Select who paid");
+      toast.error(EXPENSE_MESSAGES.SELECT_WHO_PAID);
       return;
     }
 
@@ -340,7 +341,7 @@ export default function ExpensesPage() {
 
     setExpenseTitle("");
     setExpenseAmount("");
-    toast.success("Expense added");
+    toast.success(EXPENSE_MESSAGES.EXPENSE_ADDED);
   };
 
   if (!isTripsLoading && trips.length === 0) {
@@ -348,8 +349,8 @@ export default function ExpensesPage() {
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
         <Navbar />
         <div className="mx-auto max-w-4xl px-4 py-16 text-center">
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">No trips available</h1>
-          <p className="mt-2 text-zinc-600 dark:text-zinc-400">Create a trip first to split expenses.</p>
+          <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-50">{EXPENSE_LABELS.NO_TRIPS_TITLE}</h1>
+          <p className="mt-2 text-zinc-600 dark:text-zinc-400">{EXPENSE_LABELS.NO_TRIPS_DESC}</p>
         </div>
       </div>
     );
@@ -362,9 +363,9 @@ export default function ExpensesPage() {
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-50">Expense Split</h1>
+            <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-50">{EXPENSE_LABELS.PAGE_TITLE}</h1>
             <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-              {selectedTrip ? `Manage group expenses for ${selectedTrip.destination}` : "Select a trip to get started"}
+              {selectedTrip ? `${EXPENSE_LABELS.PAGE_DESCRIPTION_SELECTED} ${selectedTrip.destination}` : EXPENSE_LABELS.PAGE_DESCRIPTION_DEFAULT}
             </p>
           </div>
           <div className="w-full md:w-80">
@@ -380,57 +381,57 @@ export default function ExpensesPage() {
         <div className="grid gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-1">
             <CardHeader>
-              <CardTitle>Group Management</CardTitle>
+              <CardTitle>{EXPENSE_LABELS.GROUP_MANAGEMENT_TITLE}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <Dialog open={isAddMemberOpen} onOpenChange={setIsAddMemberOpen}>
                 <DialogTrigger asChild>
-                  <Button className="w-full">Add Member</Button>
+                  <Button className="w-full">{EXPENSE_LABELS.ADD_MEMBER_BUTTON}</Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Add Trip Member</DialogTitle>
+                    <DialogTitle>{EXPENSE_LABELS.ADD_MEMBER_DIALOG_TITLE}</DialogTitle>
                     <DialogDescription>
-                      Add group members with name and email for expense splitting.
+                      {EXPENSE_LABELS.ADD_MEMBER_DIALOG_DESC}
                     </DialogDescription>
                   </DialogHeader>
 
                   <div className="space-y-4 py-2">
                     <div className="space-y-2">
-                      <Label htmlFor="memberName">Name</Label>
+                      <Label htmlFor="memberName">{EXPENSE_LABELS.MEMBER_NAME_LABEL}</Label>
                       <Input
                         id="memberName"
                         value={newMemberName}
                         onChange={(event) => setNewMemberName(event.target.value)}
-                        placeholder="Ex: Rahul"
+                        placeholder={EXPENSE_LABELS.MEMBER_NAME_PLACEHOLDER}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="memberEmail">Email</Label>
+                      <Label htmlFor="memberEmail">{EXPENSE_LABELS.MEMBER_EMAIL_LABEL}</Label>
                       <Input
                         id="memberEmail"
                         type="email"
                         value={newMemberEmail}
                         onChange={(event) => setNewMemberEmail(event.target.value)}
-                        placeholder="Ex: rahul@email.com"
+                        placeholder={EXPENSE_LABELS.MEMBER_EMAIL_PLACEHOLDER}
                       />
                     </div>
                   </div>
 
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setIsAddMemberOpen(false)}>
-                      Cancel
+                      {EXPENSE_LABELS.CANCEL_BUTTON}
                     </Button>
-                    <Button onClick={handleAddMember}>Save Member</Button>
+                    <Button onClick={handleAddMember}>{EXPENSE_LABELS.SAVE_MEMBER_BUTTON}</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
 
               <div className="space-y-2">
-                <Label>Member List</Label>
+                <Label>{EXPENSE_LABELS.MEMBER_LIST_LABEL}</Label>
                 <div className="space-y-2 rounded-lg border bg-zinc-50 p-3 dark:bg-zinc-900">
                   {members.length === 0 ? (
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">No members yet</p>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">{EXPENSE_LABELS.NO_MEMBERS_YET}</p>
                   ) : (
                     members.map((member) => (
                       <div key={member.id} className="flex items-center justify-between rounded-md border bg-white px-3 py-2 dark:bg-zinc-950">
@@ -441,7 +442,7 @@ export default function ExpensesPage() {
                           <div>
                             <div className="flex items-center gap-2">
                               <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{member.name}</p>
-                              {member.isOwner && <Badge variant="secondary">Owner</Badge>}
+                              {member.isOwner && <Badge variant="secondary">{EXPENSE_LABELS.OWNER_BADGE}</Badge>}
                             </div>
                             <p className="text-xs text-zinc-500 dark:text-zinc-400">{member.email}</p>
                           </div>
@@ -454,7 +455,7 @@ export default function ExpensesPage() {
                             className="h-8 px-2 text-zinc-500 hover:text-red-600"
                             onClick={() => handleRemoveMember(member.id)}
                           >
-                            Remove
+                            {EXPENSE_LABELS.REMOVE_BUTTON}
                           </Button>
                         )}
                       </div>
@@ -467,21 +468,21 @@ export default function ExpensesPage() {
 
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Add Expense</CardTitle>
+              <CardTitle>{EXPENSE_LABELS.ADD_EXPENSE_TITLE}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="expenseTitle">Title</Label>
+                <Label htmlFor="expenseTitle">{EXPENSE_LABELS.EXPENSE_TITLE_LABEL}</Label>
                 <Input
                   id="expenseTitle"
                   value={expenseTitle}
                   onChange={(event) => setExpenseTitle(event.target.value)}
-                  placeholder="Ex: Hotel booking"
+                  placeholder={EXPENSE_LABELS.EXPENSE_TITLE_PLACEHOLDER}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="amount">Amount</Label>
+                <Label htmlFor="amount">{EXPENSE_LABELS.AMOUNT_LABEL}</Label>
                 <Input
                   id="amount"
                   type="number"
@@ -489,15 +490,15 @@ export default function ExpensesPage() {
                   step="0.01"
                   value={expenseAmount}
                   onChange={(event) => setExpenseAmount(event.target.value)}
-                  placeholder="Ex: 2400"
+                  placeholder={EXPENSE_LABELS.AMOUNT_PLACEHOLDER}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Paid By</Label>
+                <Label>{EXPENSE_LABELS.PAID_BY_LABEL}</Label>
                 <Select value={expensePaidBy} onValueChange={setExpensePaidBy}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select member" />
+                    <SelectValue placeholder={EXPENSE_LABELS.PAID_BY_PLACEHOLDER} />
                   </SelectTrigger>
                   <SelectContent>
                     {members.map((member) => (
@@ -511,7 +512,7 @@ export default function ExpensesPage() {
 
               <div className="sm:col-span-2">
                 <Button className="w-full sm:w-auto" onClick={handleAddExpense}>
-                  Add Expense
+                  {EXPENSE_LABELS.ADD_EXPENSE_BUTTON}
                 </Button>
               </div>
             </CardContent>
