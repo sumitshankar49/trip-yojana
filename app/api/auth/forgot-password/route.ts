@@ -6,6 +6,17 @@ import { sendOTPEmail } from "@/backend/lib/mailer";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  // Check SMTP config eagerly before doing any DB work
+  const smtpVars = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"] as const;
+  const missingSmtp = smtpVars.filter((v) => !process.env[v]);
+  if (missingSmtp.length > 0) {
+    console.error(`[forgot-password] Missing env vars: ${missingSmtp.join(", ")}`);
+    return NextResponse.json(
+      { success: false, message: "Email service is not configured. Contact support." },
+      { status: 500 }
+    );
+  }
+
   try {
     await connectDB();
 
@@ -47,8 +58,17 @@ export async function POST(req: NextRequest) {
     user.resetOTPExpiry = otpExpiry;
     await user.save();
 
-    await sendOTPEmail(user.email, otp);
-    console.log(`[forgot-password] OTP email sent successfully to: ${user.email}`);
+    try {
+      await sendOTPEmail(user.email, otp);
+      console.log(`[forgot-password] OTP email sent successfully to: ${user.email}`);
+    } catch (mailError) {
+      const mailMsg = mailError instanceof Error ? mailError.message : String(mailError);
+      console.error(`[forgot-password] SMTP error for ${user.email}:`, mailMsg);
+      return NextResponse.json(
+        { success: false, message: "Failed to send email. Please try again later." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(
       { success: true, message: "OTP sent to your email address." },
@@ -56,9 +76,9 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error("[forgot-password] Error:", message);
+    console.error("[forgot-password] DB/server error:", message);
     return NextResponse.json(
-      { success: false, message: "Failed to send OTP. Please try again." },
+      { success: false, message: "A server error occurred. Please try again." },
       { status: 500 }
     );
   }

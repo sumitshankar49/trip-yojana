@@ -13,20 +13,23 @@ function getLogoBase64(): string {
 }
 
 function getTransporter() {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
 
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SMTP_FROM) {
     throw new Error(
-      `Missing SMTP configuration. Required: SMTP_HOST, SMTP_USER, SMTP_PASS. ` +
-      `Got: SMTP_HOST=${SMTP_HOST ? "set" : "missing"}, SMTP_USER=${SMTP_USER ? "set" : "missing"}, SMTP_PASS=${SMTP_PASS ? "set" : "missing"}`
+      `Missing SMTP configuration. ` +
+      `SMTP_HOST=${SMTP_HOST ? "set" : "MISSING"}, ` +
+      `SMTP_USER=${SMTP_USER ? "set" : "MISSING"}, ` +
+      `SMTP_PASS=${SMTP_PASS ? "set" : "MISSING"}, ` +
+      `SMTP_FROM=${SMTP_FROM ? "set" : "MISSING"}`
     );
   }
 
   return nodemailer.createTransport({
     host: SMTP_HOST,
     port: Number(SMTP_PORT) || 587,
-    secure: false,
-    requireTLS: true,
+    secure: Number(SMTP_PORT) === 465,
+    requireTLS: Number(SMTP_PORT) !== 465,
     auth: {
       user: SMTP_USER,
       pass: SMTP_PASS,
@@ -89,12 +92,13 @@ export async function sendWelcomeEmail(email: string, name: string): Promise<voi
 }
 
 export async function sendOTPEmail(email: string, otp: string): Promise<void> {
+  const from = process.env.SMTP_FROM;
   const logoSrc = getLogoBase64();
   const logoImg = logoSrc
     ? `<img src="${logoSrc}" alt="TripYojana" width="160" style="max-width:160px;height:auto;display:block;margin:0 auto 10px;" />`
     : `<h1 style="color:#ffffff;font-size:24px;font-weight:bold;margin:0 0 10px;">TripYojana</h1>`;
   await getTransporter().sendMail({
-    from: process.env.SMTP_FROM,
+    from,
     to: email,
     subject: "TripYojana - Password Reset OTP",
     html: `
