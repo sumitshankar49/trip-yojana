@@ -139,6 +139,88 @@ export default function ExpensesPage() {
     };
   }, []);
 
+  // Load expenses and members from backend when trip is selected
+  useEffect(() => {
+    if (!selectedTripId) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadExpensesAndMembers = async () => {
+      try {
+        const response = await fetch(`/api/expenses?tripId=${selectedTripId}`);
+        const data = await response.json();
+
+        if (!response.ok || !isMounted) {
+          return;
+        }
+
+        if (data.success && Array.isArray(data.expenses)) {
+          // Transform backend expenses to frontend format
+          const transformedExpenses: Expense[] = data.expenses.map((exp: any) => ({
+            id: exp.id,
+            title: exp.title,
+            amount: exp.amount,
+            paidBy: exp.paidBy, // This is the name from backend
+            createdAt: exp.date,
+          }));
+
+          setTripExpenses((prev) => ({
+            ...prev,
+            [selectedTripId]: transformedExpenses,
+          }));
+
+          // Extract unique members from expenses
+          const memberMap = new Map<string, { name: string; email: string }>();
+          data.expenses.forEach((exp: any) => {
+            // Add members from splitWith array
+            if (Array.isArray(exp.splitWith)) {
+              exp.splitWith.forEach((email: string) => {
+                if (!memberMap.has(email)) {
+                  // Try to get name from paidBy if email matches, otherwise use email
+                  const name = email.split('@')[0]; // Fallback to email prefix
+                  memberMap.set(email, { name, email });
+                }
+              });
+            }
+            // Update name for the person who paid if we can match by email
+            if (exp.paidBy && exp.splitWith?.length > 0) {
+              const paidByEmail = Array.from(memberMap.entries()).find(
+                ([_, info]) => info.name === exp.paidBy || info.email === exp.paidBy
+              )?.[0];
+              if (paidByEmail) {
+                memberMap.set(paidByEmail, { name: exp.paidBy, email: paidByEmail });
+              }
+            }
+          });
+
+          // Convert to Member array
+          const members: Member[] = Array.from(memberMap.entries()).map(([email, info], index) => ({
+            id: crypto.randomUUID(),
+            name: info.name,
+            email: info.email,
+            avatar: getInitials(info.name),
+            isOwner: index === 0, // First member is considered owner
+          }));
+
+          setTripMembers((prev) => ({
+            ...prev,
+            [selectedTripId]: members,
+          }));
+        }
+      } catch (error) {
+        console.error("Load expenses error:", error);
+      }
+    };
+
+    loadExpensesAndMembers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedTripId]);
+
   const members = useMemo(
     () => tripMembers[selectedTripId] || EMPTY_MEMBERS,
     [tripMembers, selectedTripId]
@@ -166,7 +248,13 @@ export default function ExpensesPage() {
     const paidMap = new Map<string, number>();
 
     expenses.forEach((expense) => {
-      paidMap.set(expense.paidBy, (paidMap.get(expense.paidBy) || 0) + expense.amount);
+      // Find the member who paid (paidBy could be ID or name)
+      const payingMember = members.find((m) => 
+        m.id === expense.paidBy || m.name === expense.paidBy
+      );
+      if (payingMember) {
+        paidMap.set(payingMember.id, (paidMap.get(payingMember.id) || 0) + expense.amount);
+      }
     });
 
     return members.map((member) => {
@@ -303,7 +391,7 @@ export default function ExpensesPage() {
     }
   };
 
-  const handleAddExpense = () => {
+  const handleAddExpense = async () => {
     if (!selectedTripId) {
       toast.error(EXPENSE_MESSAGES.SELECT_TRIP_FIRST);
       return;
@@ -327,22 +415,56 @@ export default function ExpensesPage() {
       return;
     }
 
-    const newExpense: Expense = {
-      id: crypto.randomUUID(),
-      title,
-      amount,
-      paidBy: expensePaidBy,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      // Get the member info to use name for paidBy
+      const paidByMember = members.find((m) => m.id === expensePaidBy);
+      
+      // Get all member emails for splitWith
+      const splitWith = members.map((m) => m.email);
 
-    setTripExpenses((prev) => ({
-      ...prev,
-      [selectedTripId]: [newExpense, ...(prev[selectedTripId] || [])],
-    }));
+      const response = await fetch("/api/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tripId: selectedTripId,
+          title,
+          amount,
+          category: "general",
+          paidBy: paidByMember?.name || "Unknown",
+          splitWith,
+          date: new Date().toISOString(),
+        }),
+      });
 
-    setExpenseTitle("");
-    setExpenseAmount("");
-    toast.success(EXPENSE_MESSAGES.EXPENSE_ADDED);
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data.message || "Failed to add expense");
+        return;
+      }
+
+      // Add to local state with the returned data
+      const newExpense: Expense = {
+        id: data.expense.id,
+        title: data.expense.title,
+        amount: data.expense.amount,
+        paidBy: expensePaidBy,
+        createdAt: data.expense.date,
+      };
+
+      setTripExpenses((prev) => ({
+        ...prev,
+        [selectedTripId]: [newExpense, ...(prev[selectedTripId] || [])],
+      }));
+
+      setExpenseTitle("");
+      setExpenseAmount("");
+      setExpensePaidBy("");
+      toast.success(EXPENSE_MESSAGES.EXPENSE_ADDED);
+    } catch (error) {
+      console.error("Add expense error:", error);
+      toast.error("Failed to add expense. Please try again.");
+    }
   };
 
   if (!isTripsLoading && trips.length === 0) {
@@ -560,7 +682,10 @@ export default function ExpensesPage() {
               ) : (
                 <div className="space-y-3">
                   {expenses.map((expense) => {
-                    const paidByMember = members.find((member) => member.id === expense.paidBy);
+                    // paidBy could be either member ID (frontend) or name (backend)
+                    const paidByMember = members.find((member) => 
+                      member.id === expense.paidBy || member.name === expense.paidBy
+                    );
                     return (
                       <div
                         key={expense.id}
@@ -569,7 +694,7 @@ export default function ExpensesPage() {
                         <div>
                           <p className="font-semibold text-zinc-900 dark:text-zinc-50">{expense.title}</p>
                           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                            Paid by {paidByMember?.name || "Unknown"} on {new Date(expense.createdAt).toLocaleDateString("en-US")}
+                            Paid by {paidByMember?.name || expense.paidBy || "Unknown"} on {new Date(expense.createdAt).toLocaleDateString("en-US")}
                           </p>
                         </div>
                         <p className="text-lg font-bold text-zinc-900 dark:text-zinc-50">{formatCurrency(expense.amount)}</p>

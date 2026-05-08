@@ -56,7 +56,12 @@ export async function PUT(
       include: {
         trip: {
           select: {
+            id: true,
             title: true,
+            destination: true,
+            source: true,
+            startDate: true,
+            endDate: true,
             user: {
               select: {
                 name: true,
@@ -119,9 +124,16 @@ export async function PUT(
           date: updatedExpense.date,
         };
 
+        const tripDetailsForEmail = {
+          destination: expense.trip.destination,
+          source: expense.trip.source || undefined,
+          startDate: expense.trip.startDate,
+          endDate: expense.trip.endDate,
+        };
+
         // Send emails to newly added members
         memberEmails.forEach((email: string) => {
-          sendExpenseMemberInviteEmail(email, inviterName, expense.trip.title, expenseDetails)
+          sendExpenseMemberInviteEmail(email, inviterName, expense.trip.title, expenseDetails, tripDetailsForEmail)
             .catch((err) =>
               console.error(`Failed to send expense invite email to ${email}:`, err)
             );

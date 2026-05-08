@@ -160,6 +160,12 @@ export async function sendExpenseMemberInviteEmail(
     amount: number;
     category: string;
     date: Date;
+  },
+  tripDetails?: {
+    destination: string;
+    source?: string;
+    startDate: Date;
+    endDate: Date;
   }
 ): Promise<void> {
   console.log(`[Mailer] Attempting to send expense invite email to: ${memberEmail}`);
@@ -176,6 +182,56 @@ export async function sendExpenseMemberInviteEmail(
     day: 'numeric',
   }).format(new Date(expenseDetails.date));
 
+  // Format trip dates and calculate duration
+  let tripDatesHtml = '';
+  if (tripDetails) {
+    const tripStartDate = new Intl.DateTimeFormat('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).format(new Date(tripDetails.startDate));
+
+    const tripEndDate = new Intl.DateTimeFormat('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).format(new Date(tripDetails.endDate));
+
+    const durationMs = new Date(tripDetails.endDate).getTime() - new Date(tripDetails.startDate).getTime();
+    const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24)) + 1;
+    const durationText = durationDays === 1 ? '1 day' : `${durationDays} days`;
+
+    tripDatesHtml = `
+          <div style="background: #f0f9ff; border-radius: 12px; padding: 24px; margin: 0 0 24px; border: 1px solid #bae6fd;">
+            <h3 style="color: #0369a1; font-size: 16px; margin: 0 0 16px; font-weight: bold;">🗓️ Trip Information</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              ${tripDetails.source ? `
+              <tr>
+                <td style="padding: 8px 0; color: #6b7280; font-size: 14px; border-bottom: 1px solid #dbeafe;">From:</td>
+                <td style="padding: 8px 0; color: #374151; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid #dbeafe;">${tripDetails.source}</td>
+              </tr>
+              ` : ''}
+              <tr>
+                <td style="padding: 8px 0; color: #6b7280; font-size: 14px; border-bottom: 1px solid #dbeafe;">Destination:</td>
+                <td style="padding: 8px 0; color: #374151; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid #dbeafe;">${tripDetails.destination}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #6b7280; font-size: 14px; border-bottom: 1px solid #dbeafe;">Start Date:</td>
+                <td style="padding: 8px 0; color: #374151; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid #dbeafe;">${tripStartDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #6b7280; font-size: 14px; border-bottom: 1px solid #dbeafe;">End Date:</td>
+                <td style="padding: 8px 0; color: #374151; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid #dbeafe;">${tripEndDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Duration:</td>
+                <td style="padding: 8px 0; color: #0891b2; font-size: 14px; font-weight: bold; text-align: right;">${durationText}</td>
+              </tr>
+            </table>
+          </div>
+    `;
+  }
+
   const { data, error } = await getResend().emails.send({
     from: FROM_ADDRESS,
     to: memberEmail,
@@ -191,6 +247,8 @@ export async function sendExpenseMemberInviteEmail(
           <p style="color: #374151; font-size: 15px; line-height: 1.7; margin: 0 0 24px;">
             <strong>${inviterName}</strong> has added you as a member to split an expense for the trip: <strong>${tripTitle}</strong>
           </p>
+          
+          ${tripDatesHtml}
           
           <div style="background: #f0fdff; border-radius: 12px; padding: 24px; margin: 0 0 28px; border: 1px solid #cffafe;">
             <h3 style="color: #0e7490; font-size: 16px; margin: 0 0 16px; font-weight: bold;">Expense Details</h3>

@@ -4,45 +4,81 @@ import prisma from "@/backend/config/prisma";
 
 export const runtime = "nodejs";
 
-// Geocoding helper function with better address handling
+// Enhanced geocoding helper with multiple strategies
 async function geocodeAddress(query: string): Promise<{ lat: number; lng: number } | null> {
   try {
-    // Try multiple search strategies for better results
+    // Helper to extract location components
+    const extractLocationParts = (address: string) => {
+      const parts = address.split(',').map(p => p.trim());
+      const city = parts.find(p => /patna|delhi|mumbai|kolkata|bangalore|chennai|hyderabad/i.test(p));
+      const state = parts.find(p => /bihar|delhi|maharashtra|west bengal|karnataka|tamil nadu|telangana/i.test(p));
+      const landmark = parts.find(p => p.length > 3 && !p.match(/\d{6}/) && p !== city && p !== state);
+      
+      return { city, state, landmark, parts };
+    };
+
+    const { city, state, landmark, parts } = extractLocationParts(query);
+
+    // Generate multiple search strategies - from specific to general
     const searchQueries = [
       query, // Original query
-      `${query}, India`, // Add India for better context
-      query.replace(/,/g, ' '), // Remove commas
-    ];
+      query.replace(/near|close to|beside|adjacent to/gi, '').trim(), // Remove proximity words
+      query.replace(/,/g, ' ').trim(), // Remove commas
+      landmark && city ? `${landmark}, ${city}` : null, // Landmark + City
+      landmark && state ? `${landmark}, ${state}` : null, // Landmark + State
+      city && state ? `${city}, ${state}` : null, // City + State
+      city ? city : null, // Just city
+      parts.length > 1 ? parts[parts.length - 2] : null, // Second to last part (often city)
+      parts[0]?.replace(/near|close to/gi, '').trim(), // First part without proximity words
+    ].filter(Boolean) as string[];
+
+    // Also try splitting long addresses
+    if (parts.length > 3) {
+      searchQueries.push(parts.slice(-3).join(', ')); // Last 3 parts
+      searchQueries.push(parts.slice(-2).join(', ')); // Last 2 parts
+    }
+
+    console.log(`Geocoding strategies for "${query}":`, searchQueries.slice(0, 5));
 
     for (const searchQuery of searchQueries) {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&limit=1&addressdetails=1`,
-        {
-          headers: {
-            'User-Agent': 'TripYojana/1.0',
-          },
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&limit=1&addressdetails=1`,
+          {
+            headers: {
+              'User-Agent': 'TripYojana/1.0 (contact@tripyojana.com)',
+            },
+          }
+        );
+        
+        if (!response.ok) {
+          console.warn(`Nominatim returned ${response.status} for "${searchQuery}"`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          continue;
         }
-      );
-      
-      const data = await response.json();
-      
-      if (data && data.length > 0) {
-        console.log(`Geocoded "${searchQuery}" successfully:`, {
-          lat: data[0].lat,
-          lon: data[0].lon,
-          display_name: data[0].display_name
-        });
-        return {
-          lat: parseFloat(data[0].lat),
-          lng: parseFloat(data[0].lon),
-        };
+
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+          console.log(`✓ Geocoded "${searchQuery}" successfully:`, {
+            lat: data[0].lat,
+            lon: data[0].lon,
+            display_name: data[0].display_name
+          });
+          return {
+            lat: parseFloat(data[0].lat),
+            lng: parseFloat(data[0].lon),
+          };
+        }
+      } catch (err) {
+        console.error(`Error trying "${searchQuery}":`, err);
       }
       
-      // Add a small delay to respect rate limits
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Rate limiting - wait between requests
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
     
-    console.log(`Failed to geocode: "${query}"`);
+    console.log(`✗ All geocoding strategies failed for: "${query}"`);
     return null;
   } catch (error) {
     console.error("Geocoding error:", error);
@@ -143,8 +179,27 @@ export async function POST(req: NextRequest) {
         }
       } else {
         console.error(`Geocoding failed for: "${geocodeQuery}"`);
+        
+        // Provide helpful suggestions based on the query
+        const suggestions: string[] = [];
+        const parts = geocodeQuery.split(',').map((p: string) => p.trim());
+        
+        if (parts.length > 2) {
+          suggestions.push(`Try just the city name: "${parts[parts.length - 2]}"`);
+        }
+        if (geocodeQuery.includes('near') || geocodeQuery.includes('Near')) {
+          const simplified = geocodeQuery.replace(/near|Near|close to/gi, '').trim();
+          suggestions.push(`Try without 'near': "${simplified}"`);
+        }
+        suggestions.push("Try adding just the city and state");
+        suggestions.push("Or click 'Find on Map' in the form to select manually");
+        
         return NextResponse.json(
-          { error: `Could not find coordinates for "${geocodeQuery}". Please try adding more details like city name or provide a more specific address.` },
+          { 
+            error: `Could not find coordinates for "${geocodeQuery}".`,
+            suggestions: suggestions,
+            tip: "Try simplifying the address to just the landmark name and city, or use manual coordinates."
+          },
           { status: 400 }
         );
       }

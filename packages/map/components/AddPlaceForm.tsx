@@ -7,12 +7,14 @@ import type { Place } from "../types";
 interface AddPlaceFormProps {
   tripId: string;
   onPlaceAdded: (place: Place) => void;
+  onMapClick?: () => void;
 }
 
-export function AddPlaceForm({ tripId, onPlaceAdded }: AddPlaceFormProps) {
+export function AddPlaceForm({ tripId, onPlaceAdded, onMapClick }: AddPlaceFormProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [showManualCoords, setShowManualCoords] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -33,28 +35,52 @@ export function AddPlaceForm({ tripId, onPlaceAdded }: AddPlaceFormProps) {
 
     setIsGeocoding(true);
     try {
-      // Using OpenStreetMap Nominatim API (free, no API key required)
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&limit=1`
-      );
-      
-      const data = await response.json();
-      
-      if (data && data.length > 0) {
-        const location = data[0];
-        setFormData({
-          ...formData,
-          lat: location.lat,
-          lng: location.lon,
-          address: formData.address || location.display_name,
+      // Try simplified address patterns for better results
+      const queries = [
+        searchQuery,
+        searchQuery.replace(/near|close to|beside/gi, '').trim(),
+      ];
+
+      let found = false;
+      for (const query of queries) {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+          {
+            headers: {
+              'User-Agent': 'TripYojana/1.0',
+            },
+          }
+        );
+        
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+          const location = data[0];
+          setFormData({
+            ...formData,
+            lat: location.lat,
+            lng: location.lon,
+            address: formData.address || location.display_name,
+          });
+          toast.success("Coordinates found!");
+          found = true;
+          break;
+        }
+        
+        // Small delay between requests
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+
+      if (!found) {
+        toast.error("Location not found. Try simplifying the address or enter coordinates manually.", {
+          duration: 5000,
         });
-        toast.success("Coordinates found!");
-      } else {
-        toast.error("Location not found. Please try a more specific address.");
+        setShowManualCoords(true);
       }
     } catch (error) {
       console.error("Geocoding error:", error);
-      toast.error("Failed to find coordinates");
+      toast.error("Failed to find coordinates. Try manual entry.");
+      setShowManualCoords(true);
     } finally {
       setIsGeocoding(false);
     }
@@ -96,7 +122,20 @@ export function AddPlaceForm({ tripId, onPlaceAdded }: AddPlaceFormProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        toast.error(data.error || "Failed to add place");
+        // Show error with suggestions if available
+        if (data.suggestions && data.suggestions.length > 0) {
+          toast.error(data.error, {
+            description: data.suggestions[0],
+            duration: 6000,
+          });
+        } else {
+          toast.error(data.error || "Failed to add place");
+        }
+        
+        // Show manual coordinate entry option
+        if (!showManualCoords) {
+          setShowManualCoords(true);
+        }
         return;
       }
 
@@ -215,14 +254,83 @@ export function AddPlaceForm({ tripId, onPlaceAdded }: AddPlaceFormProps) {
           <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
             Address
           </label>
-          <input
-            type="text"
-            value={formData.address}
-            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="Full address or landmark"
-          />
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="e.g., Patna Junction, Patna"
+            />
+            <button
+              type="button"
+              onClick={geocodeLocation}
+              disabled={isGeocoding || (!formData.name && !formData.address)}
+              className="w-full px-3 py-1.5 text-xs font-medium text-primary border border-primary rounded-lg hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isGeocoding ? "Finding..." : "🔍 Find Coordinates"}
+            </button>
+          </div>
         </div>
+
+        {/* Manual Coordinates Section */}
+        {showManualCoords && (
+          <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-amber-900 dark:text-amber-200">
+                Manual Coordinates
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowManualCoords(false)}
+                className="text-xs text-amber-700 dark:text-amber-300 hover:underline"
+              >
+                Hide
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-amber-800 dark:text-amber-300 mb-1">
+                  Latitude
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={formData.lat}
+                  onChange={(e) => setFormData({ ...formData, lat: e.target.value })}
+                  className="w-full px-2 py-1.5 text-xs bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-700 rounded focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  placeholder="25.5941"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-amber-800 dark:text-amber-300 mb-1">
+                  Longitude
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={formData.lng}
+                  onChange={(e) => setFormData({ ...formData, lng: e.target.value })}
+                  className="w-full px-2 py-1.5 text-xs bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-700 rounded focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  placeholder="85.1376"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              💡 Get coordinates from Google Maps: Right-click on location → Click coordinates
+            </p>
+          </div>
+        )}
+
+        {!showManualCoords && (
+          <button
+            type="button"
+            onClick={() => setShowManualCoords(true)}
+            className="w-full px-3 py-1.5 text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:underline"
+          >
+            Enter coordinates manually
+          </button>
+        )}
 
         <div>
           <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
@@ -274,7 +382,7 @@ export function AddPlaceForm({ tripId, onPlaceAdded }: AddPlaceFormProps) {
 
       <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
         <p className="text-xs text-blue-700 dark:text-blue-300">
-          💡 <strong>Tip:</strong> Coordinates will be automatically found from place name and address
+          💡 <strong>Tip:</strong> For best results, use simple addresses like "Patna Junction, Patna" instead of full detailed addresses
         </p>
       </div>
     </div>

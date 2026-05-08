@@ -130,9 +130,16 @@ export async function POST(req: NextRequest) {
           date: expense.date,
         };
 
+        const tripDetailsForEmail = {
+          destination: trip.destination,
+          source: trip.source || undefined,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+        };
+
         // Send emails to all members (asynchronously, don't block the response)
         memberEmails.forEach((email: string) => {
-          sendExpenseMemberInviteEmail(email, inviterName, trip.title, expenseDetails)
+          sendExpenseMemberInviteEmail(email, inviterName, trip.title, expenseDetails, tripDetailsForEmail)
             .catch((err) => 
               console.error(`Failed to send expense invite email to ${email}:`, err)
             );
