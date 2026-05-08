@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/packages/components/ui/card";
 import { Button } from "@/packages/components/ui/button";
 import { Input } from "@/packages/components/ui/input";
@@ -15,6 +16,8 @@ import { cn } from "@/packages/lib/utils";
 import { toast } from "sonner";
 import ProtectedRoute from "@/packages/components/auth/ProtectedRoute";
 import { TRIP_LABELS, TRIP_MESSAGES, TRIP_ERRORS } from "./constants";
+import { InputFieldControlled } from "@/packages/components/shared/InputFieldControlled";
+import { MapPin, Navigation } from "lucide-react";
 
 interface TripFormData {
   source: string;
@@ -36,27 +39,36 @@ const stepMeta: { step: Step; label: string; hint: string }[] = [
 export default function CreateTripPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState<Step>(1);
-  const [formData, setFormData] = useState<TripFormData>({
-    source: "",
-    destination: "",
-    startDate: undefined,
-    endDate: undefined,
-    budget: 2000,
-    travelType: "",
-  });
-  const [errors, setErrors] = useState<Partial<Record<keyof TripFormData, string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const progressPercent = (currentStep / 3) * 100;
+  
+  // Form state for dates, budget, and travel type (not using react-hook-form for these)
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [budget, setBudget] = useState<number>(2000);
+  const [travelType, setTravelType] = useState<string>("");
+  const [dateErrors, setDateErrors] = useState<{ startDate?: string; endDate?: string; travelType?: string }>({});
+  
+  // React Hook Form for source and destination
+  const { control, handleSubmit: handleFormSubmit, formState: { errors }, watch, setValue } = useForm<{ source: string; destination: string }>({
+    defaultValues: {
+      source: "",
+      destination: "",
+    },
+  });
+  
+  const source = watch("source");
+  const destination = watch("destination");
 
   const normalizeDate = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
   };
 
   const totalDays =
-    formData.startDate && formData.endDate
+    startDate && endDate
       ? Math.floor(
-          (normalizeDate(formData.endDate).getTime() -
-            normalizeDate(formData.startDate).getTime()) /
+          (normalizeDate(endDate).getTime() -
+            normalizeDate(startDate).getTime()) /
             86400000
         ) + 1
       : 0;
@@ -70,62 +82,72 @@ export default function CreateTripPage() {
     });
   };
 
-  const validateStep = (step: Step): boolean => {
-    const newErrors: Partial<Record<keyof TripFormData, string>> = {};
-
+  const validateStep = (step: Step, formData?: { source: string; destination: string }): boolean => {
     if (step === 1) {
-      if (!formData.source.trim()) {
-        newErrors.source = TRIP_ERRORS.SOURCE_REQUIRED;
+      // Validation for step 1 is handled by react-hook-form
+      if (!formData) return false;
+      
+      if (!formData.source.trim()) return false;
+      if (!formData.destination.trim()) return false;
+      if (formData.source.trim().toLowerCase() === formData.destination.trim().toLowerCase()) {
+        toast.error(TRIP_ERRORS.DESTINATION_SAME);
+        return false;
       }
-      if (!formData.destination.trim()) {
-        newErrors.destination = TRIP_ERRORS.DESTINATION_REQUIRED;
-      }
-      if (
-        formData.source.trim() &&
-        formData.destination.trim() &&
-        formData.source.trim().toLowerCase() === formData.destination.trim().toLowerCase()
-      ) {
-        newErrors.destination = TRIP_ERRORS.DESTINATION_SAME;
-      }
+      return true;
     } else if (step === 2) {
-      if (!formData.startDate) {
+      const newErrors: { startDate?: string; endDate?: string } = {};
+      
+      if (!startDate) {
         newErrors.startDate = TRIP_ERRORS.START_DATE_REQUIRED;
       }
-      if (!formData.endDate) {
+      if (!endDate) {
         newErrors.endDate = TRIP_ERRORS.END_DATE_REQUIRED;
       }
-      if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
+      if (startDate && endDate && startDate > endDate) {
         newErrors.endDate = TRIP_ERRORS.END_DATE_BEFORE_START;
       }
+      
+      setDateErrors(newErrors);
+      return Object.keys(newErrors).length === 0;
     } else if (step === 3) {
-      if (!formData.travelType) {
+      const newErrors: { travelType?: string } = {};
+      
+      if (!travelType) {
         newErrors.travelType = TRIP_ERRORS.TRAVEL_TYPE_REQUIRED;
       }
+      
+      setDateErrors(newErrors);
+      return Object.keys(newErrors).length === 0;
     }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    
+    return true;
   };
 
-  const handleNext = () => {
-    if (validateStep(currentStep)) {
-      if (currentStep < 3) {
-        setCurrentStep((prev) => (prev + 1) as Step);
-      } else {
-        handleSubmit();
+  const handleNext = handleFormSubmit((formData) => {
+    if (currentStep === 1) {
+      if (validateStep(1, formData)) {
+        setCurrentStep(2);
+      }
+    } else if (currentStep === 2) {
+      if (validateStep(2)) {
+        setCurrentStep(3);
+      }
+    } else if (currentStep === 3) {
+      if (validateStep(3)) {
+        submitTrip(formData);
       }
     }
-  };
+  });
 
   const handleBack = () => {
     if (currentStep > 1) {
       setCurrentStep((prev) => (prev - 1) as Step);
-      setErrors({});
+      setDateErrors({});
     }
   };
 
-  const handleSubmit = async () => {
-    if (!formData.startDate || !formData.endDate) {
+  const submitTrip = async (formData: { source: string; destination: string }) => {
+    if (!startDate || !endDate) {
       toast.error(TRIP_MESSAGES.DATES_REQUIRED);
       return;
     }
@@ -142,10 +164,10 @@ export default function CreateTripPage() {
           title: `${formData.source.trim()} to ${formData.destination.trim()}`,
           source: formData.source.trim(),
           destination: formData.destination.trim(),
-          budget: formData.budget,
-          startDate: formData.startDate.toISOString(),
-          endDate: formData.endDate.toISOString(),
-          travelType: formData.travelType || "leisure",
+          budget: budget,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          travelType: travelType || "leisure",
           places: [formData.source.trim(), formData.destination.trim()],
         }),
       });
@@ -171,23 +193,24 @@ export default function CreateTripPage() {
     }
   };
 
-  const updateFormData = (field: keyof TripFormData, value: string | number | Date | undefined) => {
-    setFormData((prev) => {
-      const next = { ...prev, [field]: value };
-
-      if (field === "startDate" && value instanceof Date && prev.endDate) {
-        const selectedStart = normalizeDate(value);
-        const selectedEnd = normalizeDate(prev.endDate);
-        if (selectedEnd < selectedStart) {
-          next.endDate = undefined;
-        }
+  const handleStartDateChange = (date: Date | undefined) => {
+    setStartDate(date);
+    if (date && endDate) {
+      const selectedStart = normalizeDate(date);
+      const selectedEnd = normalizeDate(endDate);
+      if (selectedEnd < selectedStart) {
+        setEndDate(undefined);
       }
+    }
+    if (dateErrors.startDate) {
+      setDateErrors((prev) => ({ ...prev, startDate: undefined }));
+    }
+  };
 
-      return next;
-    });
-
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: undefined }));
+  const handleEndDateChange = (date: Date | undefined) => {
+    setEndDate(date);
+    if (dateErrors.endDate) {
+      setDateErrors((prev) => ({ ...prev, endDate: undefined }));
     }
   };
 
@@ -295,37 +318,27 @@ export default function CreateTripPage() {
             {/* Step 1: Location */}
             {currentStep === 1 && (
               <>
-                <div className="space-y-2">
-                  <Label htmlFor="source">{TRIP_LABELS.SOURCE_LABEL}</Label>
-                  <Input
-                    id="source"
-                    placeholder={TRIP_LABELS.SOURCE_PLACEHOLDER}
-                    value={formData.source}
-                    onChange={(e) => updateFormData("source", e.target.value)}
-                    aria-invalid={!!errors.source}
-                    className="h-11"
-                  />
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{TRIP_LABELS.SOURCE_HINT}</p>
-                  {errors.source && (
-                    <p className="text-sm text-destructive">{errors.source}</p>
-                  )}
-                </div>
+                <InputFieldControlled
+                  control={control}
+                  name="source"
+                  label={TRIP_LABELS.SOURCE_LABEL}
+                  placeholder={TRIP_LABELS.SOURCE_PLACEHOLDER}
+                  description={TRIP_LABELS.SOURCE_HINT}
+                  icon={<Navigation className="h-4 w-4" />}
+                  required
+                  type="text"
+                />
 
-                <div className="space-y-2">
-                  <Label htmlFor="destination">{TRIP_LABELS.DESTINATION_LABEL}</Label>
-                  <Input
-                    id="destination"
-                    placeholder={TRIP_LABELS.DESTINATION_PLACEHOLDER}
-                    value={formData.destination}
-                    onChange={(e) => updateFormData("destination", e.target.value)}
-                    aria-invalid={!!errors.destination}
-                    className="h-11"
-                  />
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{TRIP_LABELS.DESTINATION_HINT}</p>
-                  {errors.destination && (
-                    <p className="text-sm text-destructive">{errors.destination}</p>
-                  )}
-                </div>
+                <InputFieldControlled
+                  control={control}
+                  name="destination"
+                  label={TRIP_LABELS.DESTINATION_LABEL}
+                  placeholder={TRIP_LABELS.DESTINATION_PLACEHOLDER}
+                  description={TRIP_LABELS.DESTINATION_HINT}
+                  icon={<MapPin className="h-4 w-4" />}
+                  required
+                  type="text"
+                />
               </>
             )}
 
@@ -340,7 +353,7 @@ export default function CreateTripPage() {
                         variant="outline"
                         className={cn(
                           "w-full justify-start text-left font-normal",
-                          !formData.startDate && "text-muted-foreground"
+                          !startDate && "text-muted-foreground"
                         )}
                       >
                         <svg
@@ -358,21 +371,21 @@ export default function CreateTripPage() {
                           <line x1="8" y1="2" x2="8" y2="6" />
                           <line x1="3" y1="10" x2="21" y2="10" />
                         </svg>
-                        {formatDate(formData.startDate)}
+                        {formatDate(startDate)}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
-                        selected={formData.startDate}
-                        onSelect={(date) => updateFormData("startDate", date)}
+                        selected={startDate}
+                        onSelect={handleStartDateChange}
                         disabled={(date) => normalizeDate(date) < normalizeDate(new Date())}
                         initialFocus
                       />
                     </PopoverContent>
                   </Popover>
-                  {errors.startDate && (
-                    <p className="text-sm text-destructive">{errors.startDate}</p>
+                  {dateErrors.startDate && (
+                    <p className="text-sm text-destructive">{dateErrors.startDate}</p>
                   )}
                 </div>
 
@@ -384,7 +397,7 @@ export default function CreateTripPage() {
                         variant="outline"
                         className={cn(
                           "w-full justify-start text-left font-normal",
-                          !formData.endDate && "text-muted-foreground"
+                          !endDate && "text-muted-foreground"
                         )}
                       >
                         <svg
@@ -402,26 +415,26 @@ export default function CreateTripPage() {
                           <line x1="8" y1="2" x2="8" y2="6" />
                           <line x1="3" y1="10" x2="21" y2="10" />
                         </svg>
-                        {formatDate(formData.endDate)}
+                        {formatDate(endDate)}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
-                        selected={formData.endDate}
-                        onSelect={(date) => updateFormData("endDate", date)}
+                        selected={endDate}
+                        onSelect={handleEndDateChange}
                         disabled={(date) => 
                           normalizeDate(date) < normalizeDate(new Date()) || 
-                          (formData.startDate
-                            ? normalizeDate(date) < normalizeDate(formData.startDate)
+                          (startDate
+                            ? normalizeDate(date) < normalizeDate(startDate)
                             : false)
                         }
                         initialFocus
                       />
                     </PopoverContent>
                   </Popover>
-                  {errors.endDate && (
-                    <p className="text-sm text-destructive">{errors.endDate}</p>
+                  {dateErrors.endDate && (
+                    <p className="text-sm text-destructive">{dateErrors.endDate}</p>
                   )}
                 </div>
 
@@ -441,12 +454,12 @@ export default function CreateTripPage() {
                     <div className="flex items-center justify-between">
                       <Label>{TRIP_LABELS.BUDGET_LABEL}</Label>
                       <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                        ₹{formData.budget.toLocaleString("en-IN")}
+                        ₹{budget.toLocaleString("en-IN")}
                       </span>
                     </div>
                     <Slider
-                      value={[formData.budget]}
-                      onValueChange={([value]) => updateFormData("budget", value)}
+                      value={[budget]}
+                      onValueChange={([value]) => setBudget(value)}
                       min={5000}
                       max={500000}
                       step={1000}
@@ -462,10 +475,15 @@ export default function CreateTripPage() {
                 <div className="space-y-2">
                   <Label htmlFor="travelType">{TRIP_LABELS.TRAVEL_TYPE_LABEL}</Label>
                   <Select
-                    value={formData.travelType}
-                    onValueChange={(value) => updateFormData("travelType", value)}
+                    value={travelType}
+                    onValueChange={(value) => {
+                      setTravelType(value);
+                      if (dateErrors.travelType) {
+                        setDateErrors((prev) => ({ ...prev, travelType: undefined }));
+                      }
+                    }}
                   >
-                    <SelectTrigger id="travelType" aria-invalid={!!errors.travelType}>
+                    <SelectTrigger id="travelType" aria-invalid={!!dateErrors.travelType}>
                       <SelectValue placeholder={TRIP_LABELS.TRAVEL_TYPE_PLACEHOLDER} />
                     </SelectTrigger>
                     <SelectContent>
@@ -474,8 +492,8 @@ export default function CreateTripPage() {
                       <SelectItem value="friends">{TRIP_LABELS.FRIENDS}</SelectItem>
                     </SelectContent>
                   </Select>
-                  {errors.travelType && (
-                    <p className="text-sm text-destructive">{errors.travelType}</p>
+                  {dateErrors.travelType && (
+                    <p className="text-sm text-destructive">{dateErrors.travelType}</p>
                   )}
                 </div>
 
@@ -485,22 +503,22 @@ export default function CreateTripPage() {
                     {TRIP_LABELS.TRIP_SUMMARY_TITLE}
                   </h4>
                   <div className="space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-                    <p><span className="font-medium">{TRIP_LABELS.SUMMARY_FROM}</span> {formData.source || TRIP_LABELS.NOT_SET}</p>
-                    <p><span className="font-medium">{TRIP_LABELS.SUMMARY_TO}</span> {formData.destination || TRIP_LABELS.NOT_SET}</p>
+                    <p><span className="font-medium">{TRIP_LABELS.SUMMARY_FROM}</span> {source || TRIP_LABELS.NOT_SET}</p>
+                    <p><span className="font-medium">{TRIP_LABELS.SUMMARY_TO}</span> {destination || TRIP_LABELS.NOT_SET}</p>
                     <p>
                       <span className="font-medium">Dates:</span>{" "}
-                      {formData.startDate && formData.endDate
-                        ? `${formatDate(formData.startDate)} - ${formatDate(formData.endDate)}`
+                      {startDate && endDate
+                        ? `${formatDate(startDate)} - ${formatDate(endDate)}`
                         : "Not set"}
                     </p>
-                    <p><span className="font-medium">{TRIP_LABELS.SUMMARY_BUDGET}</span> ₹{formData.budget.toLocaleString("en-IN")}</p>
+                    <p><span className="font-medium">{TRIP_LABELS.SUMMARY_BUDGET}</span> ₹{budget.toLocaleString("en-IN")}</p>
                     {totalDays > 0 && (
                       <p><span className="font-medium">Duration:</span> {totalDays} {totalDays === 1 ? "day" : "days"}</p>
                     )}
                     <p>
                       <span className="font-medium">Type:</span>{" "}
-                      {formData.travelType
-                        ? formData.travelType.charAt(0).toUpperCase() + formData.travelType.slice(1)
+                      {travelType
+                        ? travelType.charAt(0).toUpperCase() + travelType.slice(1)
                         : "Not set"}
                     </p>
                   </div>

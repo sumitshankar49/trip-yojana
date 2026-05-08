@@ -228,13 +228,16 @@ export default function AuthPage() {
                 </Label>
                 <Input
                   id="name"
+                  name="name"
                   type="text"
+                  autoComplete="name"
                   placeholder={AUTH_LABELS.NAME_PLACEHOLDER}
                   value={authFormData.name}
                   onChange={handleInputChange("name")}
                   aria-invalid={!!errors.name}
                   disabled={isLoading}
                   className={inputBaseClassName}
+                  required
                 />
                 {errors.name && (
                   <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.name}</p>
@@ -248,13 +251,16 @@ export default function AuthPage() {
               </Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 placeholder={AUTH_LABELS.EMAIL_PLACEHOLDER}
                 value={authFormData.email}
                 onChange={handleInputChange("email")}
                 aria-invalid={!!errors.email}
                 disabled={isLoading}
                 className={inputBaseClassName}
+                required
               />
               {errors.email && (
                 <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.email}</p>
@@ -278,13 +284,16 @@ export default function AuthPage() {
               <div className="relative">
                 <Input
                   id="password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   placeholder={AUTH_LABELS.PASSWORD_PLACEHOLDER}
                   value={authFormData.password}
                   onChange={handleInputChange("password")}
                   aria-invalid={!!errors.password}
                   disabled={isLoading}
                   className={inputBaseClassName}
+                  required
                 />
                 <button
                   type="button"
@@ -312,13 +321,16 @@ export default function AuthPage() {
                 <div className="relative">
                   <Input
                     id="confirmPassword"
+                    name="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
                     placeholder={AUTH_LABELS.PASSWORD_PLACEHOLDER}
                     value={authFormData.confirmPassword}
                     onChange={handleInputChange("confirmPassword")}
-                  aria-invalid={!!errors.confirmPassword}
-                  disabled={isLoading}
-                  className={inputBaseClassName}
+                    aria-invalid={!!errors.confirmPassword}
+                    disabled={isLoading}
+                    className={inputBaseClassName}
+                    required
                   />
                   <button
                     type="button"

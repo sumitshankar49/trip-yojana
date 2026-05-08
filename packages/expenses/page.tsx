@@ -83,7 +83,20 @@ export default function ExpensesPage() {
   const [selectedTripId, setSelectedTripId] = useState("");
   const [isTripsLoading, setIsTripsLoading] = useState(true);
 
-  const [tripMembers, setTripMembers] = useState<Record<string, Member[]>>({});
+  const [tripMembers, setTripMembers] = useState<Record<string, Member[]>>(() => {
+    // Load members from localStorage on mount
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("tripMembers");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          return {};
+        }
+      }
+    }
+    return {};
+  });
   const [tripExpenses, setTripExpenses] = useState<Record<string, Expense[]>>({});
 
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -92,6 +105,13 @@ export default function ExpensesPage() {
   const [expenseTitle, setExpenseTitle] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expensePaidBy, setExpensePaidBy] = useState("");
+
+  // Persist members to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("tripMembers", JSON.stringify(tripMembers));
+    }
+  }, [tripMembers]);
 
   useEffect(() => {
     let isMounted = true;
@@ -139,7 +159,7 @@ export default function ExpensesPage() {
     };
   }, []);
 
-  // Load expenses and members from backend when trip is selected
+  // Load expenses from backend when trip is selected
   useEffect(() => {
     if (!selectedTripId) {
       return;
@@ -147,7 +167,7 @@ export default function ExpensesPage() {
 
     let isMounted = true;
 
-    const loadExpensesAndMembers = async () => {
+    const loadExpenses = async () => {
       try {
         const response = await fetch(`/api/expenses?tripId=${selectedTripId}`);
         const data = await response.json();
@@ -158,7 +178,14 @@ export default function ExpensesPage() {
 
         if (data.success && Array.isArray(data.expenses)) {
           // Transform backend expenses to frontend format
-          const transformedExpenses: Expense[] = data.expenses.map((exp: any) => ({
+          const transformedExpenses: Expense[] = data.expenses.map((exp: {
+            id: string;
+            title: string;
+            amount: number;
+            paidBy: string;
+            date: string;
+            splitWith?: string[];
+          }) => ({
             id: exp.id,
             title: exp.title,
             amount: exp.amount,
@@ -171,55 +198,68 @@ export default function ExpensesPage() {
             [selectedTripId]: transformedExpenses,
           }));
 
-          // Extract unique members from expenses
-          const memberMap = new Map<string, { name: string; email: string }>();
-          data.expenses.forEach((exp: any) => {
-            // Add members from splitWith array
-            if (Array.isArray(exp.splitWith)) {
-              exp.splitWith.forEach((email: string) => {
-                if (!memberMap.has(email)) {
-                  // Try to get name from paidBy if email matches, otherwise use email
-                  const name = email.split('@')[0]; // Fallback to email prefix
-                  memberMap.set(email, { name, email });
-                }
-              });
-            }
-            // Update name for the person who paid if we can match by email
-            if (exp.paidBy && exp.splitWith?.length > 0) {
-              const paidByEmail = Array.from(memberMap.entries()).find(
-                ([_, info]) => info.name === exp.paidBy || info.email === exp.paidBy
-              )?.[0];
-              if (paidByEmail) {
-                memberMap.set(paidByEmail, { name: exp.paidBy, email: paidByEmail });
+          // If no members exist for this trip, extract them from expenses
+          if (!tripMembers[selectedTripId] || tripMembers[selectedTripId].length === 0) {
+            const memberMap = new Map<string, { name: string; email: string }>();
+            
+            data.expenses.forEach((exp: {
+              id: string;
+              title: string;
+              amount: number;
+              paidBy: string;
+              date: string;
+              splitWith?: string[];
+            }) => {
+              // Add members from splitWith array
+              if (Array.isArray(exp.splitWith)) {
+                exp.splitWith.forEach((email: string) => {
+                  if (!memberMap.has(email)) {
+                    // Default name from email prefix
+                    const name = email.split('@')[0];
+                    memberMap.set(email, { name, email });
+                  }
+                });
               }
+              // Update name for the person who paid
+              if (exp.paidBy && exp.splitWith && exp.splitWith.length > 0) {
+                const matchingEmail = exp.splitWith.find((email: string) => {
+                  const emailName = email.split('@')[0].toLowerCase();
+                  return emailName === exp.paidBy.toLowerCase() || email === exp.paidBy;
+                });
+                if (matchingEmail && memberMap.has(matchingEmail)) {
+                  memberMap.set(matchingEmail, { name: exp.paidBy, email: matchingEmail });
+                }
+              }
+            });
+
+            // Convert to Member array
+            if (memberMap.size > 0) {
+              const members: Member[] = Array.from(memberMap.entries()).map(([, info], index) => ({
+                id: crypto.randomUUID(),
+                name: info.name,
+                email: info.email,
+                avatar: getInitials(info.name),
+                isOwner: index === 0,
+              }));
+
+              setTripMembers((prev) => ({
+                ...prev,
+                [selectedTripId]: members,
+              }));
             }
-          });
-
-          // Convert to Member array
-          const members: Member[] = Array.from(memberMap.entries()).map(([email, info], index) => ({
-            id: crypto.randomUUID(),
-            name: info.name,
-            email: info.email,
-            avatar: getInitials(info.name),
-            isOwner: index === 0, // First member is considered owner
-          }));
-
-          setTripMembers((prev) => ({
-            ...prev,
-            [selectedTripId]: members,
-          }));
+          }
         }
       } catch (error) {
         console.error("Load expenses error:", error);
       }
     };
 
-    loadExpensesAndMembers();
+    loadExpenses();
 
     return () => {
       isMounted = false;
     };
-  }, [selectedTripId]);
+  }, [selectedTripId, tripMembers]);
 
   const members = useMemo(
     () => tripMembers[selectedTripId] || EMPTY_MEMBERS,
@@ -392,8 +432,21 @@ export default function ExpensesPage() {
   };
 
   const handleAddExpense = async () => {
+    console.log("handleAddExpense called", {
+      selectedTripId,
+      membersLength: members.length,
+      expenseTitle,
+      expenseAmount,
+      expensePaidBy
+    });
+
     if (!selectedTripId) {
       toast.error(EXPENSE_MESSAGES.SELECT_TRIP_FIRST);
+      return;
+    }
+
+    if (members.length === 0) {
+      toast.error("Please add at least one member before adding expenses");
       return;
     }
 
@@ -422,6 +475,14 @@ export default function ExpensesPage() {
       // Get all member emails for splitWith
       const splitWith = members.map((m) => m.email);
 
+      console.log("Adding expense:", { 
+        tripId: selectedTripId, 
+        title, 
+        amount,
+        paidByMember: paidByMember?.name,
+        splitWith 
+      });
+
       const response = await fetch("/api/expenses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -437,8 +498,10 @@ export default function ExpensesPage() {
       });
 
       const data = await response.json();
+      console.log("API Response:", { status: response.status, data });
 
       if (!response.ok) {
+        console.error("Failed to add expense:", data);
         toast.error(data.message || "Failed to add expense");
         return;
       }
@@ -448,7 +511,7 @@ export default function ExpensesPage() {
         id: data.expense.id,
         title: data.expense.title,
         amount: data.expense.amount,
-        paidBy: expensePaidBy,
+        paidBy: data.expense.paidBy, // Use the name from backend
         createdAt: data.expense.date,
       };
 
@@ -463,7 +526,11 @@ export default function ExpensesPage() {
       toast.success(EXPENSE_MESSAGES.EXPENSE_ADDED);
     } catch (error) {
       console.error("Add expense error:", error);
-      toast.error("Failed to add expense. Please try again.");
+      if (error instanceof Error) {
+        toast.error(`Failed to add expense: ${error.message}`);
+      } else {
+        toast.error("Failed to add expense. Please try again.");
+      }
     }
   };
 
@@ -594,6 +661,11 @@ export default function ExpensesPage() {
               <CardTitle>{EXPENSE_LABELS.ADD_EXPENSE_TITLE}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
+              {members.length === 0 && (
+                <div className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+                  👥 Please add members to your group first before creating expenses.
+                </div>
+              )}
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="expenseTitle">{EXPENSE_LABELS.EXPENSE_TITLE_LABEL}</Label>
                 <Input
@@ -601,6 +673,7 @@ export default function ExpensesPage() {
                   value={expenseTitle}
                   onChange={(event) => setExpenseTitle(event.target.value)}
                   placeholder={EXPENSE_LABELS.EXPENSE_TITLE_PLACEHOLDER}
+                  disabled={members.length === 0}
                 />
               </div>
 
@@ -614,12 +687,13 @@ export default function ExpensesPage() {
                   value={expenseAmount}
                   onChange={(event) => setExpenseAmount(event.target.value)}
                   placeholder={EXPENSE_LABELS.AMOUNT_PLACEHOLDER}
+                  disabled={members.length === 0}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label>{EXPENSE_LABELS.PAID_BY_LABEL}</Label>
-                <Select value={expensePaidBy} onValueChange={setExpensePaidBy}>
+                <Select value={expensePaidBy} onValueChange={setExpensePaidBy} disabled={members.length === 0}>
                   <SelectTrigger>
                     <SelectValue placeholder={EXPENSE_LABELS.PAID_BY_PLACEHOLDER} />
                   </SelectTrigger>
@@ -634,7 +708,7 @@ export default function ExpensesPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <Button className="w-full sm:w-auto" onClick={handleAddExpense}>
+                <Button className="w-full sm:w-auto" onClick={handleAddExpense} disabled={members.length === 0}>
                   {EXPENSE_LABELS.ADD_EXPENSE_BUTTON}
                 </Button>
               </div>

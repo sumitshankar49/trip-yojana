@@ -15,6 +15,7 @@ import { profileSchema, ProfileFormData } from "./validations";
 import { ProfileData } from "./types";
 import { PROFILE_LABELS, PROFILE_MESSAGES } from "./constants";
 import { User, Phone, MapPin, Image as ImageIcon, Loader2 } from "lucide-react";
+import { InputFieldControlled } from "@/packages/components/shared/InputFieldControlled";
 
 export default function ProfilePage() {
   const { data: session, update } = useSession();
@@ -24,6 +25,7 @@ export default function ProfilePage() {
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
     setValue,
@@ -176,26 +178,16 @@ export default function ProfilePage() {
           <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               {/* Name Field */}
-              <div className="space-y-2">
-                <Label htmlFor="name" className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  {PROFILE_LABELS.NAME_LABEL}
-                  <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder={PROFILE_LABELS.NAME_PLACEHOLDER}
-                  {...register("name")}
-                  disabled={isLoading}
-                  className="h-11"
-                />
-                {errors.name && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.name.message}
-                  </p>
-                )}
-              </div>
+              <InputFieldControlled
+                control={control}
+                name="name"
+                label={PROFILE_LABELS.NAME_LABEL}
+                placeholder={PROFILE_LABELS.NAME_PLACEHOLDER}
+                icon={<User className="h-4 w-4" />}
+                disabled={isLoading}
+                required
+                type="text"
+              />
 
               {/* Email Field (Read-only) */}
               <div className="space-y-2">
@@ -216,71 +208,39 @@ export default function ProfilePage() {
               </div>
 
               {/* Phone Field */}
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="flex items-center gap-2">
-                  <Phone className="h-4 w-4" />
-                  {PROFILE_LABELS.PHONE_LABEL}
-                  <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder={PROFILE_LABELS.PHONE_PLACEHOLDER}
-                  {...register("phone")}
-                  disabled={isLoading}
-                  className="h-11"
-                />
-                {errors.phone && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.phone.message}
-                  </p>
-                )}
-              </div>
+              <InputFieldControlled
+                control={control}
+                name="phone"
+                label={PROFILE_LABELS.PHONE_LABEL}
+                placeholder={PROFILE_LABELS.PHONE_PLACEHOLDER}
+                icon={<Phone className="h-4 w-4" />}
+                disabled={isLoading}
+                required
+                type="tel"
+              />
 
               {/* Profile Photo URL Field */}
-              <div className="space-y-2">
-                <Label htmlFor="profilePhoto" className="flex items-center gap-2">
-                  <ImageIcon className="h-4 w-4" />
-                  {PROFILE_LABELS.PROFILE_PHOTO_LABEL}
-                </Label>
-                <Input
-                  id="profilePhoto"
-                  type="url"
-                  placeholder={PROFILE_LABELS.PROFILE_PHOTO_PLACEHOLDER}
-                  {...register("profilePhoto")}
-                  disabled={isLoading}
-                  className="h-11"
-                />
-                {errors.profilePhoto && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.profilePhoto.message}
-                  </p>
-                )}
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Enter a valid image URL to display your profile photo
-                </p>
-              </div>
+              <InputFieldControlled
+                control={control}
+                name="profilePhoto"
+                label={PROFILE_LABELS.PROFILE_PHOTO_LABEL}
+                placeholder={PROFILE_LABELS.PROFILE_PHOTO_PLACEHOLDER}
+                icon={<ImageIcon className="h-4 w-4" />}
+                disabled={isLoading}
+                type="url"
+                description="Enter a valid image URL to display your profile photo"
+              />
 
               {/* City Field */}
-              <div className="space-y-2">
-                <Label htmlFor="city" className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4" />
-                  {PROFILE_LABELS.CITY_LABEL}
-                </Label>
-                <Input
-                  id="city"
-                  type="text"
-                  placeholder={PROFILE_LABELS.CITY_PLACEHOLDER}
-                  {...register("city")}
-                  disabled={isLoading}
-                  className="h-11"
-                />
-                {errors.city && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.city.message}
-                  </p>
-                )}
-              </div>
+              <InputFieldControlled
+                control={control}
+                name="city"
+                label={PROFILE_LABELS.CITY_LABEL}
+                placeholder={PROFILE_LABELS.CITY_PLACEHOLDER}
+                icon={<MapPin className="h-4 w-4" />}
+                disabled={isLoading}
+                type="text"
+              />
 
               {/* Submit Button */}
               <Button
