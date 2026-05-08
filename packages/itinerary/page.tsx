@@ -27,6 +27,7 @@ type SlotName = "morning" | "afternoon" | "evening";
 type ApiTrip = {
   _id: string;
   title: string;
+  source?: string;
   startDate: string;
   endDate: string;
   places?: string[];
@@ -40,15 +41,15 @@ type TripOption = {
   endDate: string;
 };
 
-type PlaceCandidate = {
+type TripPlace = {
   id: string;
   name: string;
-  location: string;
-  notes: string;
-  interests: Interest[];
-  area: string;
-  durationMin: number;
-  bestSlot: SlotName;
+  description?: string;
+  lat: number;
+  lng: number;
+  category: string;
+  address?: string;
+  time?: string;
 };
 
 type SlotPlan = {
@@ -77,15 +78,6 @@ type DayPlan = {
 
 const SLOT_ORDER: SlotName[] = ["morning", "afternoon", "evening"];
 
-const AREA_COORDS: Record<string, [number, number]> = {
-  north: [28.7041, 77.1025],
-  south: [12.9716, 77.5946],
-  east: [22.5726, 88.3639],
-  west: [19.076, 72.8777],
-  central: [23.2599, 77.4126],
-  custom: [20.5937, 78.9629],
-};
-
 const ItineraryMap = dynamic<ItineraryMapProps>(
   () =>
     (import("../map/components/MapComponent") as Promise<Record<string, unknown>>).then(
@@ -108,135 +100,6 @@ const SLOT_TIMES: Record<SlotName, string> = {
   evening: "06:30 PM",
 };
 
-const INTEREST_OPTIONS: { value: Interest; label: string }[] = [
-  { value: "temple", label: "Temple" },
-  { value: "nature", label: "Nature" },
-  { value: "food", label: "Food" },
-];
-
-const PLACE_LIBRARY: PlaceCandidate[] = [
-  {
-    id: "p1",
-    name: "Old City Heritage Walk",
-    location: "Historic Quarter",
-    notes: "Great for architecture photos and local stories.",
-    interests: ["temple", "nature"],
-    area: "central",
-    durationMin: 120,
-    bestSlot: "morning",
-  },
-  {
-    id: "p2",
-    name: "Museum and Art Gallery",
-    location: "Museum District",
-    notes: "Book tickets online to skip queues.",
-    interests: ["temple", "nature"],
-    area: "central",
-    durationMin: 150,
-    bestSlot: "afternoon",
-  },
-  {
-    id: "p3",
-    name: "City Viewpoint",
-    location: "Hill Top",
-    notes: "Best around golden hour.",
-    interests: ["nature"],
-    area: "north",
-    durationMin: 90,
-    bestSlot: "evening",
-  },
-  {
-    id: "p4",
-    name: "Street Food Trail",
-    location: "Market Street",
-    notes: "Try 3-4 signature dishes.",
-    interests: ["food"],
-    area: "central",
-    durationMin: 120,
-    bestSlot: "evening",
-  },
-  {
-    id: "p5",
-    name: "Botanical Garden",
-    location: "Garden Zone",
-    notes: "Relaxing walk and shaded pathways.",
-    interests: ["nature"],
-    area: "east",
-    durationMin: 100,
-    bestSlot: "morning",
-  },
-  {
-    id: "p6",
-    name: "Adventure Activity Park",
-    location: "Outskirts",
-    notes: "Keep hydration and spare clothes.",
-    interests: ["nature"],
-    area: "west",
-    durationMin: 180,
-    bestSlot: "afternoon",
-  },
-  {
-    id: "p7",
-    name: "Local Handicraft Market",
-    location: "Bazaar Road",
-    notes: "Bargain politely for better prices.",
-    interests: ["food", "temple"],
-    area: "south",
-    durationMin: 110,
-    bestSlot: "afternoon",
-  },
-  {
-    id: "p8",
-    name: "Riverfront Walk",
-    location: "River Promenade",
-    notes: "Ideal for sunset views.",
-    interests: ["nature", "food"],
-    area: "east",
-    durationMin: 90,
-    bestSlot: "evening",
-  },
-  {
-    id: "p9",
-    name: "Historic Fort Complex",
-    location: "Fort Area",
-    notes: "Carry light walking shoes.",
-    interests: ["temple", "nature"],
-    area: "north",
-    durationMin: 160,
-    bestSlot: "morning",
-  },
-  {
-    id: "p10",
-    name: "Temple Circuit",
-    location: "Sacred Zone",
-    notes: "Respect local customs and dress code.",
-    interests: ["temple"],
-    area: "south",
-    durationMin: 130,
-    bestSlot: "morning",
-  },
-  {
-    id: "p11",
-    name: "Cafe and Bakery Crawl",
-    location: "Downtown",
-    notes: "Perfect slow-paced break between attractions.",
-    interests: ["food"],
-    area: "central",
-    durationMin: 100,
-    bestSlot: "afternoon",
-  },
-  {
-    id: "p12",
-    name: "Night Cultural Show",
-    location: "Performance Center",
-    notes: "Reserve seats in advance.",
-    interests: ["temple", "food"],
-    area: "central",
-    durationMin: 120,
-    bestSlot: "evening",
-  },
-];
-
 function dayDiffInclusive(startDate: string, endDate: string) {
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -244,47 +107,6 @@ function dayDiffInclusive(startDate: string, endDate: string) {
     return 1;
   }
   return Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
-}
-
-function hashToOffset(seed: string) {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash << 5) - hash + seed.charCodeAt(i);
-    hash |= 0;
-  }
-  return (Math.abs(hash) % 1000) / 1000;
-}
-
-function resolveLatLng(area: string, seed: string, dayNumber: number, slotIndex: number): { lat: number; lng: number } {
-  const base = AREA_COORDS[area] || AREA_COORDS.custom;
-  const seedOffset = hashToOffset(seed);
-  const dayOffset = dayNumber * 0.03;
-  const slotOffset = slotIndex * 0.015;
-
-  return {
-    lat: base[0] + seedOffset * 0.12 + dayOffset,
-    lng: base[1] + seedOffset * 0.14 + slotOffset,
-  };
-}
-
-function buildFallbackPlace(destination: string, interest: Interest, index: number): PlaceCandidate {
-  return {
-    id: `fallback-${interest}-${index}`,
-    name: `${interest[0].toUpperCase() + interest.slice(1)} Experience`,
-    location: destination || "City Center",
-    notes: `Explore a ${interest} spot in ${destination || "the destination"}.`,
-    interests: [interest],
-    area: ["central", "north", "east", "south", "west"][index % 5],
-    durationMin: 90,
-    bestSlot: SLOT_ORDER[index % SLOT_ORDER.length],
-  };
-}
-
-function scoreCandidate(candidate: PlaceCandidate, interests: Interest[], slot: SlotName, previousArea: string | null) {
-  const interestMatches = candidate.interests.filter((value) => interests.includes(value)).length;
-  const slotScore = candidate.bestSlot === slot ? 3 : 0;
-  const commuteScore = previousArea && candidate.area === previousArea ? 2 : 0;
-  return interestMatches * 5 + slotScore + commuteScore;
 }
 
 function haversineDistanceKm(start: [number, number], end: [number, number]) {
@@ -310,99 +132,74 @@ function estimateTravelTimeMin(distanceKm: number) {
   return Math.max(0, Math.round((distanceKm / avgCitySpeedKmh) * 60 + bufferMin));
 }
 
-function generateItinerary(destination: string, days: number, interests: Interest[]): DayPlan[] {
+function generateItineraryFromPlaces(tripPlaces: TripPlace[], days: number): DayPlan[] {
+  const SLOT_ORDER: SlotName[] = ["morning", "afternoon", "evening"];
   const totalSlots = days * SLOT_ORDER.length;
-  const MAX_PLACES_PER_DAY = SLOT_ORDER.length;
-  const OVERLOAD_LIMIT_MIN = 8 * 60;
-  const effectiveInterests: Interest[] =
-    interests.length > 0 ? interests : (["temple", "nature", "food"] as Interest[]);
-
-  const ranked = PLACE_LIBRARY
-    .map((place) => {
-      const matches = place.interests.filter((interest) => effectiveInterests.includes(interest)).length;
-      return { place, rank: matches * 10 + (place.bestSlot === "morning" ? 1 : 0) };
-    })
-    .sort((a, b) => b.rank - a.rank)
-    .map((entry) => entry.place);
-
-  const selectedPool: PlaceCandidate[] = [...ranked];
-  let fallbackCounter = 1;
-
-  while (selectedPool.length < totalSlots) {
-    const fallbackInterest = effectiveInterests[(fallbackCounter - 1) % effectiveInterests.length];
-    selectedPool.push(buildFallbackPlace(destination, fallbackInterest, fallbackCounter));
-    fallbackCounter += 1;
-  }
-
-  const remaining = selectedPool.slice(0, totalSlots);
   const output: DayPlan[] = [];
 
+  // Distribute places across days
+  let placeIndex = 0;
+  
   for (let day = 1; day <= days; day += 1) {
     const slots: SlotPlan[] = [];
-    let previousArea: string | null = null;
     let previousCoords: [number, number] | null = null;
     let totalDistanceKm = 0;
     let totalTravelMin = 0;
 
-    SLOT_ORDER.forEach((slotName, slotIndex) => {
-      const rankedCandidates = remaining
-        .map((candidate, index) => {
-          const coords = resolveLatLng(candidate.area, candidate.name, day, slotIndex);
-          const distanceKm = previousCoords
-            ? haversineDistanceKm(previousCoords, [coords.lat, coords.lng])
-            : 0;
-          const score = scoreCandidate(candidate, effectiveInterests, slotName, previousArea);
-          return { candidate, index, score, distanceKm };
-        })
-        .sort((a, b) => {
-          if (b.score !== a.score) {
-            return b.score - a.score;
-          }
-          return a.distanceKm - b.distanceKm;
+    SLOT_ORDER.forEach((slotName) => {
+      const place = tripPlaces[placeIndex];
+      
+      if (place) {
+        const currentCoords: [number, number] = [place.lat, place.lng];
+        const distanceFromPreviousKm = previousCoords
+          ? haversineDistanceKm(previousCoords, currentCoords)
+          : 0;
+        const travelTimeMinFromPrevious = previousCoords ? estimateTravelTimeMin(distanceFromPreviousKm) : 0;
+
+        totalDistanceKm += distanceFromPreviousKm;
+        totalTravelMin += travelTimeMinFromPrevious;
+        previousCoords = currentCoords;
+
+        slots.push({
+          id: `${day}-${slotName}-${place.id}`,
+          slot: slotName,
+          time: place.time || SLOT_TIMES[slotName],
+          name: place.name,
+          location: place.address || "Location",
+          notes: place.description || "",
+          area: "custom",
+          durationMin: 90,
+          lat: place.lat,
+          lng: place.lng,
+          distanceFromPreviousKm,
+          travelTimeMinFromPrevious,
         });
-
-      const picked = rankedCandidates[0];
-      const selected = picked
-        ? remaining.splice(picked.index, 1)[0]
-        : buildFallbackPlace(destination, effectiveInterests[0], day * 10 + slotIndex);
-      previousArea = selected.area;
-      const coords = resolveLatLng(selected.area, selected.name, day, slotIndex);
-      const distanceFromPreviousKm = previousCoords
-        ? haversineDistanceKm(previousCoords, [coords.lat, coords.lng])
-        : 0;
-      const travelTimeMinFromPrevious = slotIndex === 0 ? 0 : estimateTravelTimeMin(distanceFromPreviousKm);
-
-      totalDistanceKm += distanceFromPreviousKm;
-      totalTravelMin += travelTimeMinFromPrevious;
-      previousCoords = [coords.lat, coords.lng];
-
-      slots.push({
-        id: `${day}-${slotName}-${selected.id}`,
-        slot: slotName,
-        time: SLOT_TIMES[slotName],
-        name: selected.name,
-        location: selected.location.includes(destination) || !destination
-          ? selected.location
-          : `${selected.location}, ${destination}`,
-        notes: selected.notes,
-        area: selected.area,
-        durationMin: selected.durationMin,
-        lat: coords.lat,
-        lng: coords.lng,
-        distanceFromPreviousKm,
-        travelTimeMinFromPrevious,
-      });
+        
+        placeIndex++;
+      } else {
+        // Free slot if no more places
+        slots.push({
+          id: `${day}-${slotName}-free`,
+          slot: slotName,
+          time: SLOT_TIMES[slotName],
+          name: "Free Time",
+          location: "Flexible",
+          notes: "Keep this slot open for rest or spontaneous plans.",
+          area: "custom",
+          durationMin: 90,
+          lat: 0,
+          lng: 0,
+          distanceFromPreviousKm: 0,
+          travelTimeMinFromPrevious: 0,
+        });
+      }
     });
 
     const totalActivityMin = slots.reduce((sum, slot) => sum + slot.durationMin, 0);
     const totalPlannedMin = totalActivityMin + totalTravelMin;
     const warnings: string[] = [];
 
-    if (slots.length > MAX_PLACES_PER_DAY) {
-      warnings.push("Too many places assigned for one day");
-    }
-
-    if (totalPlannedMin > OVERLOAD_LIMIT_MIN) {
+    if (totalPlannedMin > 8 * 60) {
       warnings.push("Overloaded day: consider moving one place to another day");
     }
 
@@ -483,7 +280,11 @@ function mapApiDaysToPlans(days: Array<{ dayNumber: number; places: Array<{ name
           location: "Flexible",
           notes: "Keep this slot open for rest or spontaneous plans.",
         };
-        const coords = resolveLatLng("custom", `${place.name}-${place.location}`, day.dayNumber, index);
+        // Use placeholder coordinates based on day and slot index
+        const coords = {
+          lat: 20.5937 + (day.dayNumber * 0.01) + (index * 0.005),
+          lng: 78.9629 + (day.dayNumber * 0.01) + (index * 0.005),
+        };
         const currentCoords: [number, number] = [coords.lat, coords.lng];
         const distanceFromPreviousKm = previousCoords
           ? haversineDistanceKm(previousCoords, currentCoords)
@@ -542,10 +343,11 @@ export default function ItineraryPage() {
   const [trips, setTrips] = useState<TripOption[]>([]);
   const [isTripsLoading, setIsTripsLoading] = useState(true);
   const [selectedTripId, setSelectedTripId] = useState("");
+  const [tripPlaces, setTripPlaces] = useState<TripPlace[]>([]);
+  const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
 
   const [destination, setDestination] = useState("");
   const [days, setDays] = useState(3);
-  const [interests, setInterests] = useState<Interest[]>(["temple", "nature", "food"]);
 
   const [dayPlans, setDayPlans] = useState<DayPlan[]>([]);
   const [selectedDayNumber, setSelectedDayNumber] = useState<number>(1);
@@ -626,6 +428,37 @@ export default function ItineraryPage() {
 
     let isMounted = true;
 
+    const loadPlaces = async () => {
+      setIsLoadingPlaces(true);
+      try {
+        const response = await fetch(`/api/places?tripId=${selectedTripId}`, { cache: "no-store" });
+        const data = await response.json();
+
+        if (!response.ok) {
+          toast.error(data?.error || "Failed to load places");
+          if (isMounted) {
+            setTripPlaces([]);
+          }
+          return;
+        }
+
+        const places = Array.isArray(data) ? data : [];
+        if (isMounted) {
+          setTripPlaces(places);
+        }
+      } catch (error) {
+        console.error("Load places error:", error);
+        toast.error("Error loading trip places");
+        if (isMounted) {
+          setTripPlaces([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingPlaces(false);
+        }
+      }
+    };
+
     const loadItinerary = async () => {
       setIsLoadingItinerary(true);
       try {
@@ -638,12 +471,15 @@ export default function ItineraryPage() {
         }
 
         const apiDays = Array.isArray(data?.itinerary?.days) ? data.itinerary.days : [];
-        if (isMounted && apiDays.length > 0) {
+        
+        // If there's old itinerary data but no places, it's stale data - ignore it
+        if (isMounted && apiDays.length > 0 && tripPlaces.length > 0) {
           const mappedPlans = mapApiDaysToPlans(apiDays);
           skipNextAutoSaveRef.current = true;
           lastSavedSignatureRef.current = JSON.stringify(buildItineraryPayload(mappedPlans));
           setDayPlans(mappedPlans);
         } else if (isMounted) {
+          // No itinerary or stale itinerary with 0 places
           skipNextAutoSaveRef.current = true;
           lastSavedSignatureRef.current = "";
           setDayPlans([]);
@@ -658,6 +494,7 @@ export default function ItineraryPage() {
       }
     };
 
+    loadPlaces();
     loadItinerary();
 
     return () => {
@@ -701,22 +538,14 @@ export default function ItineraryPage() {
     }));
   }, [selectedDayPlan]);
 
-  const handleInterestToggle = (interest: Interest, checked: boolean | "indeterminate") => {
-    if (checked === "indeterminate") {
+  const handleGenerate = () => {
+    if (!selectedTripId) {
+      toast.error("Please select a trip first");
       return;
     }
-    setInterests((prev) => {
-      if (checked) {
-        return prev.includes(interest) ? prev : [...prev, interest];
-      }
-      return prev.filter((item) => item !== interest);
-    });
-  };
 
-  const handleGenerate = () => {
-    const cleanDestination = destination.trim();
-    if (!cleanDestination) {
-      toast.error(ITINERARY_MESSAGES.DESTINATION_REQUIRED);
+    if (tripPlaces.length === 0) {
+      toast.error("No places added to this trip. Please add places in the Map section first.");
       return;
     }
 
@@ -725,17 +554,9 @@ export default function ItineraryPage() {
       return;
     }
 
-    const generated = generateItinerary(cleanDestination, days, interests);
+    const generated = generateItineraryFromPlaces(tripPlaces, days);
     setDayPlans(generated);
-    const optimized = toDayWiseOutput(generated);
-    const overloadedDays = optimized.filter((day) => day.warnings.length > 0).length;
-
-    if (overloadedDays > 0) {
-      toast.warning(`Optimized itinerary generated with ${overloadedDays} overloaded day${overloadedDays > 1 ? "s" : ""}`);
-      return;
-    }
-
-    toast.success(ITINERARY_MESSAGES.GENERATED_SUCCESS);
+    toast.success(`Itinerary generated with ${tripPlaces.length} places across ${days} days. Click Save to store it.`);
   };
 
   const saveItinerary = useCallback(async (source: "manual" | "auto") => {
@@ -791,6 +612,36 @@ export default function ItineraryPage() {
 
   const handleSave = async () => {
     await saveItinerary("manual");
+  };
+
+  const handleClear = async () => {
+    if (!selectedTripId) {
+      toast.error("No trip selected");
+      return;
+    }
+
+    if (!window.confirm("Are you sure you want to clear the current itinerary? This will delete all saved data.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/trips/${selectedTripId}/itinerary`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        toast.error(data?.message || "Failed to clear itinerary");
+        return;
+      }
+
+      setDayPlans([]);
+      lastSavedSignatureRef.current = "";
+      toast.success("Itinerary cleared successfully");
+    } catch (error) {
+      console.error("Clear itinerary error:", error);
+      toast.error("Failed to clear itinerary");
+    }
   };
 
   useEffect(() => {
@@ -904,35 +755,28 @@ export default function ItineraryPage() {
                 />
               </div>
 
-              <div className="space-y-3">
-                <Label>{ITINERARY_LABELS.INTERESTS_LABEL}</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {INTEREST_OPTIONS.map((item) => (
-                    <label
-                      key={item.value}
-                      className={cn(
-                        "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
-                        interests.includes(item.value)
-                          ? "border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300"
-                          : "border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
-                      )}
-                    >
-                      <Checkbox
-                        checked={interests.includes(item.value)}
-                        onCheckedChange={(checked) => handleInterestToggle(item.value, checked)}
-                      />
-                      <span>{item.label}</span>
-                    </label>
-                  ))}
+              <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 dark:border-cyan-900 dark:bg-cyan-950/30">
+                <div className="text-sm font-medium text-cyan-900 dark:text-cyan-100">
+                  Trip Places: {tripPlaces.length}
+                </div>
+                <div className="mt-1 text-xs text-cyan-700 dark:text-cyan-300">
+                  {isLoadingPlaces ? "Loading places..." : tripPlaces.length === 0 ? "No places added yet. Add places in Map section." : `${tripPlaces.length} place${tripPlaces.length !== 1 ? 's' : ''} will be distributed across ${days} day${days !== 1 ? 's' : ''}`}
                 </div>
               </div>
 
               <div className="flex gap-2">
-                <Button className="flex-1 bg-cyan-600 text-white hover:bg-cyan-700" onClick={handleGenerate}>
+                <Button 
+                  className="flex-1 bg-cyan-600 text-white hover:bg-cyan-700" 
+                  onClick={handleGenerate}
+                  disabled={tripPlaces.length === 0 || isLoadingPlaces}
+                >
                   {ITINERARY_LABELS.GENERATE_BUTTON}
                 </Button>
-                <Button variant="outline" className="flex-1" onClick={handleSave} disabled={isSaving || isAutoSaving || dayPlans.length === 0}>
+                <Button variant="outline" onClick={handleSave} disabled={isSaving || isAutoSaving || dayPlans.length === 0}>
                   {isSaving || isAutoSaving ? ITINERARY_LABELS.SAVING_BUTTON : ITINERARY_LABELS.SAVE_BUTTON}
+                </Button>
+                <Button variant="outline" onClick={handleClear} disabled={dayPlans.length === 0} className="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950">
+                  Clear
                 </Button>
               </div>
 
@@ -976,7 +820,32 @@ export default function ItineraryPage() {
             {dayPlans.length === 0 ? (
               <Card className="border-dashed border-zinc-300 bg-white/80 dark:border-zinc-700 dark:bg-zinc-900/70">
                 <CardContent className="py-16 text-center">
-                  <p className="text-zinc-600 dark:text-zinc-400">No itinerary yet. Generate one to see the day-wise timeline.</p>
+                  {!selectedTripId ? (
+                    <div>
+                      <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-2">No Trip Selected</p>
+                      <p className="text-zinc-600 dark:text-zinc-400">Please select a trip from the dropdown above to view or create an itinerary.</p>
+                    </div>
+                  ) : tripPlaces.length === 0 ? (
+                    <div>
+                      <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-2">No Places Added</p>
+                      <p className="text-zinc-600 dark:text-zinc-400 mb-4">
+                        You haven't added any places to this trip yet. Add places first to generate an itinerary.
+                      </p>
+                      <Button 
+                        onClick={() => window.location.href = '/map'}
+                        className="bg-cyan-600 text-white hover:bg-cyan-700"
+                      >
+                        Go to Map → Add Places
+                      </Button>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-2">No Itinerary Generated</p>
+                      <p className="text-zinc-600 dark:text-zinc-400 mb-4">
+                        You have {tripPlaces.length} place{tripPlaces.length !== 1 ? 's' : ''} added. Click "Generate" above to create your day-by-day itinerary.
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ) : (

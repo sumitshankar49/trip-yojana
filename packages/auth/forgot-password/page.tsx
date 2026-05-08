@@ -4,6 +4,7 @@ import { useState, FormEvent } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/packages/components/ui/card";
 import { Input } from "@/packages/components/ui/input";
 import { Label } from "@/packages/components/ui/label";
@@ -63,6 +64,8 @@ export default function ForgotPasswordPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("email");
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -400,18 +403,32 @@ export default function ForgotPasswordPage() {
                     <Label htmlFor="newPassword" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
                       {LABELS.newPassword}
                     </Label>
-                    <Input
-                      id="newPassword"
-                      type="password"
-                      placeholder={PLACEHOLDERS.password}
-                      value={newPassword}
-                      onChange={(e) => {
-                        setNewPassword(e.target.value);
-                        if (errors.newPassword) setErrors((p) => ({ ...p, newPassword: "" }));
-                      }}
-                      disabled={isLoading}
-                      className={inputBaseClassName}
-                    />
+                    <div className="relative">
+                      <Input
+                        id="newPassword"
+                        type={showPassword ? "text" : "password"}
+                        placeholder={PLACEHOLDERS.password}
+                        value={newPassword}
+                        onChange={(e) => {
+                          setNewPassword(e.target.value);
+                          if (errors.newPassword) setErrors((p) => ({ ...p, newPassword: "" }));
+                        }}
+                        disabled={isLoading}
+                        className={inputBaseClassName}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+                        disabled={isLoading}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-5 w-5" />
+                        ) : (
+                          <Eye className="h-5 w-5" />
+                        )}
+                      </button>
+                    </div>
                     {errors.newPassword && (
                       <p className="text-xs text-red-600 dark:text-red-400">{errors.newPassword}</p>
                     )}
@@ -420,18 +437,32 @@ export default function ForgotPasswordPage() {
                     <Label htmlFor="confirmPassword" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
                       {LABELS.confirmPassword}
                     </Label>
-                    <Input
-                      id="confirmPassword"
-                      type="password"
-                      placeholder={PLACEHOLDERS.password}
-                      value={confirmPassword}
-                      onChange={(e) => {
-                        setConfirmPassword(e.target.value);
-                        if (errors.confirmPassword) setErrors((p) => ({ ...p, confirmPassword: "" }));
-                      }}
-                      disabled={isLoading}
-                      className={inputBaseClassName}
-                    />
+                    <div className="relative">
+                      <Input
+                        id="confirmPassword"
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder={PLACEHOLDERS.password}
+                        value={confirmPassword}
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value);
+                          if (errors.confirmPassword) setErrors((p) => ({ ...p, confirmPassword: "" }));
+                        }}
+                        disabled={isLoading}
+                        className={inputBaseClassName}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+                        disabled={isLoading}
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="h-5 w-5" />
+                        ) : (
+                          <Eye className="h-5 w-5" />
+                        )}
+                      </button>
+                    </div>
                     {errors.confirmPassword && (
                       <p className="text-xs text-red-600 dark:text-red-400">{errors.confirmPassword}</p>
                     )}

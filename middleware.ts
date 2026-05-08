@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 
+// Middleware configuration must use JWT tokens, not the auth() function
+// because middleware runs in Edge runtime which doesn't support Node.js modules
 export async function middleware(req: NextRequest) {
-  const token = await getToken({ req, secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET });
+  const token = await getToken({ 
+    req, 
+    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+    secureCookie: process.env.NODE_ENV === "production",
+  });
   const isLoggedIn = Boolean(token);
   const { pathname } = req.nextUrl;
 

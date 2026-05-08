@@ -140,10 +140,13 @@ export default function CreateTripPage() {
         },
         body: JSON.stringify({
           title: `${formData.source.trim()} to ${formData.destination.trim()}`,
+          source: formData.source.trim(),
+          destination: formData.destination.trim(),
           budget: formData.budget,
           startDate: formData.startDate.toISOString(),
           endDate: formData.endDate.toISOString(),
-          places: [formData.destination.trim()],
+          travelType: formData.travelType || "leisure",
+          places: [formData.source.trim(), formData.destination.trim()],
         }),
       });
 
@@ -155,8 +158,11 @@ export default function CreateTripPage() {
       }
 
       toast.success(TRIP_MESSAGES.TRIP_CREATED);
-      router.push("/dashboard");
-      router.refresh();
+      
+      // Redirect to dashboard after 1 second
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 1000);
     } catch (error) {
       console.error("Create trip error:", error);
       toast.error(TRIP_MESSAGES.GENERIC_ERROR);

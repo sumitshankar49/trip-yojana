@@ -1,5 +1,5 @@
 export const ITINERARY_LABELS = {
-  PAGE_TITLE: "AI Itinerary Generator",
+  PAGE_TITLE: "Trip Craft",
   PAGE_DESCRIPTION:
     "Enter destination, days, and interests to generate a day-wise timeline with morning, afternoon, and evening slots.",
 

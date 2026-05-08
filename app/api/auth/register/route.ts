@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import connectDB from "@/backend/config/db";
-import User from "@/backend/models/User";
+import prisma from "@/backend/config/prisma";
 import { sendWelcomeEmail } from "@/backend/lib/mailer";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
-    // Connect to database
-    await connectDB();
-
     // Parse request body
     const { email, password, name } = await req.json();
 
@@ -40,7 +36,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
     if (existingUser) {
       return NextResponse.json(
         { success: false, message: "User with this email already exists" },
@@ -53,10 +52,12 @@ export async function POST(req: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
     // Create new user
-    const newUser = await User.create({
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      name: name || "",
+    const newUser = await prisma.user.create({
+      data: {
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        name: name || "",
+      },
     });
 
     // Send welcome email (non-blocking — don't fail registration if email fails)
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
         success: true,
         message: "User registered successfully",
         user: {
-          id: newUser._id,
+          id: newUser.id,
           email: newUser.email,
           name: newUser.name,
         },
@@ -83,18 +84,27 @@ export async function POST(req: NextRequest) {
     );
   } catch (error: unknown) {
     console.error("Registration error:", error);
-    
-    // Handle mongoose validation errors
-    if (error && typeof error === "object" && "name" in error && error.name === "ValidationError") {
-      const errorMessage = "message" in error && typeof error.message === "string" ? error.message : "Validation error";
+
+    // Handle Prisma unique constraint errors
+    if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
       return NextResponse.json(
-        { success: false, message: errorMessage },
-        { status: 400 }
+        { success: false, message: "User with this email already exists" },
+        { status: 409 }
       );
     }
 
+    // Handle database connection errors
+    if (error && typeof error === "object" && "code" in error && error.code === "P1001") {
+      return NextResponse.json(
+        { success: false, message: "Database connection error. Please contact support or try again later." },
+        { status: 503 }
+      );
+    }
+
+    // Generic error
+    const errorMessage = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json(
-      { success: false, message: "Internal server error" },
+      { success: false, message: errorMessage },
       { status: 500 }
     );
   }

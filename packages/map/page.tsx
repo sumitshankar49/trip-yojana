@@ -5,21 +5,32 @@ import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Navbar from "@/packages/components/shared/Navbar";
 import { TripFilter, type TripOption } from "@/packages/components/shared/TripFilter";
-import { PlacesList, SelectedPlaceOverlay } from "./components";
-import { useMapData } from "./hooks";
-import { TRIP_PLACES } from "@/packages/constants/tripData";
-import type { Place } from "./types";
+import { PlacesList, SelectedPlaceOverlay, AddPlaceForm } from "./components";
+import type { Place, MapComponentProps } from "./types";
 import { toast } from "sonner";
 
 type ApiTrip = {
   _id: string;
   title: string;
+  source?: string;
+  destination: string;
   places?: string[];
 };
 
+type DbPlace = {
+  id: string;
+  name: string;
+  description?: string | null;
+  lat: number;
+  lng: number;
+  category: string;
+  address?: string | null;
+  time?: string | null;
+};
+
 // Dynamic import for map component (client-side only)
-const MapComponent = dynamic(
-  () => import("./components/MapComponent"),
+const MapComponent = dynamic<MapComponentProps>(
+  () => import("./components/MapComponent").then(mod => ({ default: mod.MapComponent })),
   {
     ssr: false,
     loading: () => (
@@ -41,12 +52,9 @@ export default function MapPage() {
   const [isTripsLoading, setIsTripsLoading] = useState(true);
   const [selectedTripId, setSelectedTripId] = useState("");
   
-  const {
-    places,
-    selectedPlace,
-    setSelectedPlace,
-    removePlace,
-  } = useMapData();
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [isPlacesLoading, setIsPlacesLoading] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -67,7 +75,7 @@ export default function MapPage() {
         const apiTrips = Array.isArray(data?.trips) ? (data.trips as ApiTrip[]) : [];
         const mappedTrips: TripOption[] = apiTrips.map((trip) => ({
           id: String(trip._id),
-          destination: trip.places?.[0] || trip.title,
+          destination: trip.source || trip.title,
         }));
 
         if (!isMounted) {
@@ -111,30 +119,96 @@ export default function MapPage() {
     };
   }, [destination]);
 
-  const selectedTrip = trips.find((trip) => trip.id === selectedTripId);
+  // Load places when selected trip changes
+  useEffect(() => {
+    if (!selectedTripId) {
+      setPlaces([]);
+      return;
+    }
 
-  const fallbackTripPlaces: Place[] = selectedTrip
-    ? [
-        {
-          id: selectedTrip.id,
-          name: selectedTrip.destination,
-          description: "Newly created trip destination",
-          lat: 20.5937,
-          lng: 78.9629,
-          category: "attraction",
-          time: "Anytime",
-          address: selectedTrip.destination,
-        },
-      ]
-    : places;
+    let isMounted = true;
 
-  // Get places for selected trip
-  const tripPlaces = TRIP_PLACES[selectedTripId] || fallbackTripPlaces;
-  
+    const loadPlaces = async () => {
+      setIsPlacesLoading(true);
+      try {
+        const response = await fetch(`/api/places?tripId=${selectedTripId}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error("Failed to load places:", data.error);
+          if (isMounted) {
+            setPlaces([]);
+          }
+          return;
+        }
+
+        if (isMounted) {
+          const dbPlaces = data.places || [];
+          // Convert database format to Place format
+          const convertedPlaces: Place[] = dbPlaces.map((p: DbPlace) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description || "",
+            lat: p.lat,
+            lng: p.lng,
+            category: p.category as Place["category"],
+            address: p.address || undefined,
+            time: p.time || undefined,
+          }));
+          setPlaces(convertedPlaces);
+        }
+      } catch (error) {
+        console.error("Places load error:", error);
+        if (isMounted) {
+          setPlaces([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsPlacesLoading(false);
+        }
+      }
+    };
+
+    loadPlaces();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedTripId]);
+
+  // Remove place handler
+  const removePlace = async (placeId: string) => {
+    try {
+      const response = await fetch(`/api/places/${placeId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        toast.error("Failed to delete place");
+        return;
+      }
+
+      // Remove from local state
+      setPlaces((prev) => prev.filter((p) => p.id !== placeId));
+      if (selectedPlace?.id === placeId) {
+        setSelectedPlace(null);
+      }
+      toast.success("Place removed");
+    } catch (error) {
+      console.error("Remove place error:", error);
+      toast.error("Failed to remove place");
+    }
+  };
+
+  // Add place handler
+  const handlePlaceAdded = (newPlace: Place) => {
+    setPlaces((prev) => [...prev, newPlace]);
+  };
+
   // Auto-select place when destination is provided
   useEffect(() => {
-    if (destination && tripPlaces.length > 0) {
-      const matchedPlace = tripPlaces.find(
+    if (destination && places.length > 0) {
+      const matchedPlace = places.find(
         (p) => p.name.toLowerCase().includes(destination.toLowerCase()) ||
                p.address?.toLowerCase().includes(destination.toLowerCase())
       );
@@ -142,50 +216,137 @@ export default function MapPage() {
         setSelectedPlace(matchedPlace);
       }
     }
-  }, [destination, tripPlaces, setSelectedPlace]);
+  }, [destination, places]);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       <Navbar />
 
-      <div className="flex h-[calc(100vh-64px)]">
-        {/* LEFT PANEL */}
-        <div className="w-100 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col shrink-0">
-          {/* Trip Filter */}
-          <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
-            <TripFilter 
-              selectedTripId={selectedTripId} 
-              onTripChange={setSelectedTripId} 
-              trips={trips}
-              isLoading={isTripsLoading}
-              className="w-full"
-            />
-          </div>
-          
-          {/* Places List */}
-          <div className="flex-1 overflow-hidden">
-            <PlacesList
-              places={tripPlaces}
-              selectedPlace={selectedPlace}
-              onSelectPlace={setSelectedPlace}
-              onRemovePlace={removePlace}
-            />
+      {isTripsLoading ? (
+        // Loading State
+        <div className="flex h-[calc(100vh-64px)] items-center justify-center">
+          <div className="text-center">
+            <div className="w-12 h-12 mx-auto mb-4 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading your trips...</p>
           </div>
         </div>
-
-        {/* RIGHT MAP */}
-        <div className="flex-1 relative">
-          <MapComponent places={tripPlaces} focusPlace={destination} />
-
-          {/* Selected Place Info Overlay */}
-          {selectedPlace && (
-            <SelectedPlaceOverlay
-              place={selectedPlace}
-              onClose={() => setSelectedPlace(null)}
-            />
-          )}
+      ) : trips.length === 0 ? (
+        // Empty State - No Trips
+        <div className="flex h-[calc(100vh-64px)] items-center justify-center">
+          <div className="text-center max-w-md px-4">
+            <div className="mb-6">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-24 h-24 mx-auto text-zinc-300 dark:text-zinc-700"
+              >
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                <polyline points="9 22 9 12 15 12 15 22" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mb-3">
+              No Trips Yet
+            </h2>
+            <p className="text-zinc-600 dark:text-zinc-400 mb-6">
+              Create your first trip to start exploring destinations on the map. Plan your journey, add places, and visualize your adventure!
+            </p>
+            <a
+              href="/create-trip"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors font-medium"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-5 h-5"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Create Your First Trip
+            </a>
+          </div>
         </div>
-      </div>
+      ) : (
+        // Map View with Trips
+        <div className="flex h-[calc(100vh-64px)]">
+          {/* LEFT PANEL */}
+          <div className="w-100 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col shrink-0">
+            {/* Trip Filter */}
+            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
+              <TripFilter 
+                selectedTripId={selectedTripId} 
+                onTripChange={setSelectedTripId} 
+                trips={trips}
+                isLoading={isTripsLoading}
+                className="w-full"
+              />
+            </div>
+
+            {/* Trip Selected Status */}
+            {selectedTripId && (
+              <div className="px-4 pt-2 pb-3 bg-cyan-50 dark:bg-cyan-950/30 border-b border-cyan-200 dark:border-cyan-900">
+                <p className="text-xs text-cyan-700 dark:text-cyan-300">
+                  <span className="font-medium">Selected: </span>
+                  {trips.find(t => t.id === selectedTripId)?.destination || 'Trip'}
+                </p>
+              </div>
+            )}
+
+            {/* Add Place Form */}
+            {selectedTripId && (
+              <AddPlaceForm 
+                tripId={selectedTripId} 
+                onPlaceAdded={handlePlaceAdded} 
+              />
+            )}
+            
+            {/* Places List */}
+            <div className="flex-1 overflow-hidden">
+              {isPlacesLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <div className="w-8 h-8 mx-auto mb-2 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                    <p className="text-xs text-zinc-600 dark:text-zinc-400">Loading places...</p>
+                  </div>
+                </div>
+              ) : (
+                <PlacesList
+                  places={places}
+                  selectedPlace={selectedPlace}
+                  onSelectPlace={setSelectedPlace}
+                  onRemovePlace={removePlace}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT MAP */}
+          <div className="flex-1 relative">
+            <MapComponent 
+              places={places} 
+              focusPlace={destination}
+            />
+
+            {/* Selected Place Info Overlay */}
+            {selectedPlace && (
+              <SelectedPlaceOverlay
+                place={selectedPlace}
+                onClose={() => setSelectedPlace(null)}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

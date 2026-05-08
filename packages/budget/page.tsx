@@ -44,7 +44,7 @@ export default function BudgetPage() {
         const apiTrips = Array.isArray(data?.trips) ? (data.trips as ApiTrip[]) : [];
         const mappedTrips: TripOption[] = apiTrips.map((trip) => ({
           id: String(trip._id),
-          destination: trip.places?.[0] || trip.title,
+          destination: trip.source || trip.title,
         }));
 
         const budgets: Record<string, number> = {};

@@ -24,6 +24,7 @@ import { EXPENSE_LABELS, EXPENSE_MESSAGES } from "./constants";
 type ApiTrip = {
   _id: string;
   title: string;
+  source?: string;
   places?: string[];
 };
 
@@ -112,7 +113,7 @@ export default function ExpensesPage() {
         const apiTrips = Array.isArray(data?.trips) ? (data.trips as ApiTrip[]) : [];
         const mapped: TripOption[] = apiTrips.map((trip) => ({
           id: String(trip._id),
-          destination: trip.places?.[0] || trip.title,
+          destination: trip.source || trip.title,
         }));
 
         if (!isMounted) {

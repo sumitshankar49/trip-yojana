@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import mongoose from "mongoose";
-import connectDB from "@/backend/config/db";
 import { auth } from "@/backend/lib/auth";
-import Trip from "@/backend/models/Trip";
-import Itinerary from "@/backend/models/Itinerary";
+import prisma from "@/backend/config/prisma";
 
 export const runtime = "nodejs";
 
@@ -169,27 +166,16 @@ async function getAuthorizedUserId() {
   return session.user.id;
 }
 
-async function getTripId(params: Promise<{ id: string }>) {
+async function getTripId(params: Promise<{ id: string }>): Promise<string> {
   const { id } = await params;
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return null;
-  }
-
-  return id;
+  return id || "";
 }
 
 async function verifyTripOwnership(tripId: string, userId: string) {
-  const trip = await Trip.exists({ _id: tripId, userId });
+  const trip = await prisma.trip.findFirst({ 
+    where: { id: tripId, userId } 
+  });
   return Boolean(trip);
-}
-
-async function ensureItineraryDocument(tripId: string, userId: string) {
-  await Itinerary.findOneAndUpdate(
-    { tripId, userId },
-    { $setOnInsert: { tripId, userId, days: [] } },
-    { upsert: true, new: false }
-  );
 }
 
 export async function GET(
@@ -206,14 +192,12 @@ export async function GET(
     }
 
     const tripId = await getTripId(params);
-    if (!tripId) {
+    if (!tripId || !tripId.trim()) {
       return NextResponse.json(
         { success: false, message: "Invalid trip id" },
         { status: 400 }
       );
     }
-
-    await connectDB();
 
     const ownsTrip = await verifyTripOwnership(tripId, userId);
     if (!ownsTrip) {
@@ -223,14 +207,31 @@ export async function GET(
       );
     }
 
-    const itinerary = await Itinerary.findOne({ tripId, userId })
-      .select("tripId days updatedAt")
-      .lean();
+    // Fetch all itinerary days for this trip
+    const itineraryDays = await prisma.itinerary.findMany({
+      where: { tripId },
+      orderBy: { dayNumber: 'asc' },
+      select: {
+        dayNumber: true,
+        date: true,
+        activities: true,
+        notes: true,
+        updatedAt: true,
+      },
+    });
+
+    // Format as days array with places (activities)
+    const days = itineraryDays.map(day => ({
+      dayNumber: day.dayNumber,
+      date: day.date,
+      places: Array.isArray(day.activities) ? day.activities : [],
+      notes: day.notes,
+    }));
 
     return NextResponse.json(
       {
         success: true,
-        itinerary: itinerary || { tripId, days: [] },
+        itinerary: { tripId, days },
       },
       { status: 200 }
     );
@@ -257,7 +258,7 @@ export async function PUT(
     }
 
     const tripId = await getTripId(params);
-    if (!tripId) {
+    if (!tripId || !tripId.trim()) {
       return NextResponse.json(
         { success: false, message: "Invalid trip id" },
         { status: 400 }
@@ -273,8 +274,6 @@ export async function PUT(
       );
     }
 
-    await connectDB();
-
     const ownsTrip = await verifyTripOwnership(tripId, userId);
     if (!ownsTrip) {
       return NextResponse.json(
@@ -283,28 +282,68 @@ export async function PUT(
       );
     }
 
-    const itinerary = await Itinerary.findOneAndUpdate(
-      { tripId, userId },
-      {
-        $set: {
-          days: normalizedDays.data,
-        },
+    // Get trip dates to calculate day dates
+    const trip = await prisma.trip.findUnique({
+      where: { id: tripId },
+      select: { startDate: true },
+    });
+
+    if (!trip) {
+      return NextResponse.json(
+        { success: false, message: "Trip not found" },
+        { status: 404 }
+      );
+    }
+
+    // Delete existing itinerary days for this trip
+    await prisma.itinerary.deleteMany({
+      where: { tripId },
+    });
+
+    // Create new itinerary days
+    const itineraryDays = normalizedDays.data?.map((day) => {
+      const dayDate = new Date(trip.startDate);
+      dayDate.setDate(dayDate.getDate() + (day.dayNumber - 1));
+      
+      return {
+        tripId,
+        dayNumber: day.dayNumber,
+        date: dayDate,
+        activities: day.places,
+        notes: null,
+      };
+    });
+
+    if (itineraryDays && itineraryDays.length > 0) {
+      await prisma.itinerary.createMany({
+        data: itineraryDays,
+      });
+    }
+
+    // Fetch the updated itinerary
+    const updatedItinerary = await prisma.itinerary.findMany({
+      where: { tripId },
+      orderBy: { dayNumber: 'asc' },
+      select: {
+        dayNumber: true,
+        date: true,
+        activities: true,
+        notes: true,
       },
-      {
-        new: true,
-        upsert: true,
-        runValidators: true,
-        setDefaultsOnInsert: true,
-      }
-    )
-      .select("tripId days updatedAt")
-      .lean();
+    });
+
+    const days = updatedItinerary.map(day => ({
+      dayNumber: day.dayNumber,
+      date: day.date,
+      places: Array.isArray(day.activities) ? day.activities : [],
+      notes: day.notes,
+    }));
 
     return NextResponse.json(
       {
         success: true,
         message: "Itinerary updated successfully",
-        itinerary,
+        itinerary: { tripId, days },
       },
       { status: 200 }
     );
@@ -331,16 +370,12 @@ export async function PATCH(
     }
 
     const tripId = await getTripId(params);
-    if (!tripId) {
+    if (!tripId || !tripId.trim()) {
       return NextResponse.json(
         { success: false, message: "Invalid trip id" },
         { status: 400 }
       );
     }
-
-    const operationBody = (await req.json()) as Partial<ItineraryPatchOperation>;
-
-    await connectDB();
 
     const ownsTrip = await verifyTripOwnership(tripId, userId);
     if (!ownsTrip) {
@@ -350,46 +385,51 @@ export async function PATCH(
       );
     }
 
-    await ensureItineraryDocument(tripId, userId);
+    const operationBody = (await req.json()) as Partial<ItineraryPatchOperation>;
 
     if (operationBody.operation === "upsert_day") {
       const normalizedDay = normalizeDay(operationBody.day || {});
-      if (normalizedDay.error) {
+      if (normalizedDay.error || !normalizedDay.data) {
         return NextResponse.json(
-          { success: false, message: normalizedDay.error },
+          { success: false, message: normalizedDay.error || "Invalid day payload" },
           { status: 400 }
         );
       }
 
-      if (!normalizedDay.data) {
+      // Get trip dates
+      const trip = await prisma.trip.findUnique({
+        where: { id: tripId },
+        select: { startDate: true },
+      });
+
+      if (!trip) {
         return NextResponse.json(
-          { success: false, message: "Invalid day payload" },
-          { status: 400 }
+          { success: false, message: "Trip not found" },
+          { status: 404 }
         );
       }
 
-      const result = await Itinerary.updateOne(
-        { tripId, userId, "days.dayNumber": normalizedDay.data.dayNumber },
-        {
-          $set: {
-            "days.$.places": normalizedDay.data.places,
+      const dayDate = new Date(trip.startDate);
+      dayDate.setDate(dayDate.getDate() + (normalizedDay.data.dayNumber - 1));
+
+      // Upsert the day
+      await prisma.itinerary.upsert({
+        where: {
+          tripId_dayNumber: {
+            tripId,
+            dayNumber: normalizedDay.data.dayNumber,
           },
-        }
-      );
-
-      if (result.matchedCount === 0) {
-        await Itinerary.updateOne(
-          { tripId, userId },
-          {
-            $push: {
-              days: {
-                $each: [normalizedDay.data],
-                $sort: { dayNumber: 1 },
-              },
-            },
-          }
-        );
-      }
+        },
+        update: {
+          activities: normalizedDay.data.places,
+        },
+        create: {
+          tripId,
+          dayNumber: normalizedDay.data.dayNumber,
+          date: dayDate,
+          activities: normalizedDay.data.places,
+        },
+      });
     } else if (operationBody.operation === "remove_day") {
       const dayNumber = Number(operationBody.dayNumber);
       if (!Number.isInteger(dayNumber) || dayNumber < 1) {
@@ -399,169 +439,103 @@ export async function PATCH(
         );
       }
 
-      await Itinerary.updateOne(
-        { tripId, userId },
-        {
-          $pull: {
-            days: { dayNumber },
-          },
-        }
-      );
-    } else if (operationBody.operation === "add_place") {
-      const dayNumber = Number(operationBody.dayNumber);
-      if (!Number.isInteger(dayNumber) || dayNumber < 1) {
-        return NextResponse.json(
-          { success: false, message: "dayNumber must be a positive integer" },
-          { status: 400 }
-        );
-      }
-
-      const normalizedPlace = normalizePlace(operationBody.place || {});
-      if (normalizedPlace.error) {
-        return NextResponse.json(
-          { success: false, message: normalizedPlace.error },
-          { status: 400 }
-        );
-      }
-
-      const addToExistingDay = await Itinerary.updateOne(
-        { tripId, userId, "days.dayNumber": dayNumber },
-        {
-          $push: {
-            "days.$.places": normalizedPlace.data,
-          },
-        }
-      );
-
-      if (addToExistingDay.matchedCount === 0) {
-        await Itinerary.updateOne(
-          { tripId, userId },
-          {
-            $push: {
-              days: {
-                $each: [
-                  {
-                    dayNumber,
-                    places: [normalizedPlace.data],
-                  },
-                ],
-                $sort: { dayNumber: 1 },
-              },
-            },
-          }
-        );
-      }
-    } else if (operationBody.operation === "update_place") {
-      const dayNumber = Number(operationBody.dayNumber);
-      if (!Number.isInteger(dayNumber) || dayNumber < 1) {
-        return NextResponse.json(
-          { success: false, message: "dayNumber must be a positive integer" },
-          { status: 400 }
-        );
-      }
-
-      const placeId = String(operationBody.placeId || "");
-      if (!mongoose.Types.ObjectId.isValid(placeId)) {
-        return NextResponse.json(
-          { success: false, message: "Invalid placeId" },
-          { status: 400 }
-        );
-      }
-
-      const normalizedPlace = normalizePlace(operationBody.place || {});
-      if (normalizedPlace.error) {
-        return NextResponse.json(
-          { success: false, message: normalizedPlace.error },
-          { status: 400 }
-        );
-      }
-
-      const result = await Itinerary.updateOne(
-        { tripId, userId },
-        {
-          $set: {
-            "days.$[day].places.$[place]": {
-              _id: new mongoose.Types.ObjectId(placeId),
-              ...normalizedPlace.data,
-            },
+      await prisma.itinerary.delete({
+        where: {
+          tripId_dayNumber: {
+            tripId,
+            dayNumber,
           },
         },
-        {
-          arrayFilters: [
-            { "day.dayNumber": dayNumber },
-            { "place._id": new mongoose.Types.ObjectId(placeId) },
-          ],
-        }
-      );
-
-      if (result.matchedCount === 0 || result.modifiedCount === 0) {
-        return NextResponse.json(
-          { success: false, message: "Place not found" },
-          { status: 404 }
-        );
-      }
-    } else if (operationBody.operation === "remove_place") {
-      const dayNumber = Number(operationBody.dayNumber);
-      if (!Number.isInteger(dayNumber) || dayNumber < 1) {
-        return NextResponse.json(
-          { success: false, message: "dayNumber must be a positive integer" },
-          { status: 400 }
-        );
-      }
-
-      const placeId = String(operationBody.placeId || "");
-      if (!mongoose.Types.ObjectId.isValid(placeId)) {
-        return NextResponse.json(
-          { success: false, message: "Invalid placeId" },
-          { status: 400 }
-        );
-      }
-
-      const result = await Itinerary.updateOne(
-        { tripId, userId },
-        {
-          $pull: {
-            "days.$[day].places": {
-              _id: new mongoose.Types.ObjectId(placeId),
-            },
-          },
-        },
-        {
-          arrayFilters: [{ "day.dayNumber": dayNumber }],
-        }
-      );
-
-      if (result.matchedCount === 0 || result.modifiedCount === 0) {
-        return NextResponse.json(
-          { success: false, message: "Place not found" },
-          { status: 404 }
-        );
-      }
+      });
     } else {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Unsupported operation. Use: upsert_day, remove_day, add_place, update_place, remove_place",
+          message: "Unsupported operation. Use: upsert_day, remove_day",
         },
         { status: 400 }
       );
     }
 
-    const itinerary = await Itinerary.findOne({ tripId, userId })
-      .select("tripId days updatedAt")
-      .lean();
+    // Fetch updated itinerary
+    const itineraryDays = await prisma.itinerary.findMany({
+      where: { tripId },
+      orderBy: { dayNumber: 'asc' },
+      select: {
+        dayNumber: true,
+        date: true,
+        activities: true,
+        notes: true,
+      },
+    });
+
+    const days = itineraryDays.map(day => ({
+      dayNumber: day.dayNumber,
+      date: day.date,
+      places: Array.isArray(day.activities) ? day.activities : [],
+      notes: day.notes,
+    }));
 
     return NextResponse.json(
       {
         success: true,
         message: "Itinerary patched successfully",
-        itinerary,
+        itinerary: { tripId, days },
       },
       { status: 200 }
     );
   } catch (error) {
     console.error("Patch itinerary error:", error);
+    return NextResponse.json(
+      { success: false, message: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const userId = await getAuthorizedUserId();
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const tripId = await getTripId(params);
+    if (!tripId) {
+      return NextResponse.json(
+        { success: false, message: "Invalid trip id" },
+        { status: 400 }
+      );
+    }
+
+    const ownsTrip = await verifyTripOwnership(tripId, userId);
+    if (!ownsTrip) {
+      return NextResponse.json(
+        { success: false, message: "Trip not found" },
+        { status: 404 }
+      );
+    }
+
+    // Delete all itinerary days for this trip
+    await prisma.itinerary.deleteMany({
+      where: { tripId },
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Itinerary cleared successfully",
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("Delete itinerary error:", error);
     return NextResponse.json(
       { success: false, message: "Internal server error" },
       { status: 500 }

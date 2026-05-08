@@ -1,20 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/backend/config/db";
 import { auth } from "@/backend/lib/auth";
-import Trip from "@/backend/models/Trip";
+import prisma from "@/backend/config/prisma";
 
 export const runtime = "nodejs";
 
 function validateTripPayload(payload: {
   title?: unknown;
+  source?: unknown;
+  destination?: unknown;
   budget?: unknown;
   startDate?: unknown;
   endDate?: unknown;
   places?: unknown;
+  travelType?: unknown;
 }) {
   const hasPlacesArray = Array.isArray(payload.places);
   const rawPlaces: unknown[] = hasPlacesArray ? (payload.places as unknown[]) : [];
   const title = typeof payload.title === "string" ? payload.title.trim() : "";
+  const source = typeof payload.source === "string" ? payload.source.trim() : "";
+  const destination = typeof payload.destination === "string" ? payload.destination.trim() : "";
+  const travelType = typeof payload.travelType === "string" ? payload.travelType.trim() : "";
   const budget = Number(payload.budget);
   const startDate = new Date(String(payload.startDate));
   const endDate = new Date(String(payload.endDate));
@@ -25,6 +30,10 @@ function validateTripPayload(payload: {
 
   if (!title) {
     return { error: "Trip title is required" };
+  }
+
+  if (!destination) {
+    return { error: "Destination is required" };
   }
 
   if (!Number.isFinite(budget) || budget < 0) {
@@ -50,10 +59,22 @@ function validateTripPayload(payload: {
   return {
     data: {
       title,
+      source: source || destination,
+      destination,
       budget,
       startDate,
       endDate,
       places,
+      travelType: travelType || "leisure",
+    } as {
+      title: string;
+      source: string;
+      destination: string;
+      budget: number;
+      startDate: Date;
+      endDate: Date;
+      places: string[];
+      travelType: string;
     },
   };
 }
@@ -69,16 +90,34 @@ export async function GET() {
       );
     }
 
-    await connectDB();
+    const trips = await prisma.trip.findMany({
+      where: { userId: String(session.user.id) },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        source: true,
+        destination: true,
+        startDate: true,
+        endDate: true,
+        budget: true,
+        travelType: true,
+        places: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
-    const trips = await Trip.find({ userId: session.user.id })
-      .sort({ createdAt: -1 })
-      .lean();
+    // Format trips for frontend (convert id to _id for compatibility)
+    const formattedTrips = trips.map(trip => ({
+      _id: trip.id,
+      ...trip,
+    }));
 
     return NextResponse.json(
       {
         success: true,
-        trips,
+        trips: formattedTrips,
       },
       { status: 200 }
     );
@@ -112,18 +151,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await connectDB();
+    if (!validation.data) {
+      return NextResponse.json(
+        { success: false, message: "Invalid trip data" },
+        { status: 400 }
+      );
+    }
 
-    const trip = await Trip.create({
-      userId: session.user.id,
-      ...validation.data,
+    const tripData = validation.data;
+
+    const trip = await prisma.trip.create({
+      data: {
+        userId: String(session.user.id),
+        title: tripData.title,
+        source: tripData.source,
+        destination: tripData.destination,
+        startDate: tripData.startDate,
+        endDate: tripData.endDate,
+        budget: tripData.budget,
+        travelType: tripData.travelType,
+        places: tripData.places,
+      },
     });
 
     return NextResponse.json(
       {
         success: true,
         message: "Trip created successfully",
-        trip,
+        trip: {
+          _id: trip.id,
+          ...trip,
+        },
       },
       { status: 201 }
     );

@@ -58,8 +58,13 @@ export function useMapData() {
 
   // Save data to localStorage whenever it changes
   useEffect(() => {
-    if (typeof window !== "undefined" && places.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: DATA_VERSION, places }));
+    if (typeof window !== "undefined") {
+      if (places.length > 0) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: DATA_VERSION, places }));
+      } else {
+        // Clear localStorage when no places exist
+        localStorage.removeItem(STORAGE_KEY);
+      }
     }
   }, [places]);
 

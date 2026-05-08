@@ -21,6 +21,7 @@ import { formatDate, formatCurrency } from "./helpers";
 type ApiTrip = {
   _id: string;
   title: string;
+  source?: string;
   budget: number;
   startDate: string;
   endDate: string;
@@ -30,7 +31,7 @@ type ApiTrip = {
 function mapApiTripToDashboardTrip(trip: ApiTrip): Trip {
   return {
     id: String(trip._id),
-    destination: trip.places?.[0] || trip.title,
+    destination: trip.source || trip.title,
     startDate: trip.startDate,
     endDate: trip.endDate,
     budget: Number(trip.budget || 0),

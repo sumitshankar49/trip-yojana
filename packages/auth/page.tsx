@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { toast } from "sonner";
+import { Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/packages/components/ui/card";
 import { Input } from "@/packages/components/ui/input";
 import { Label } from "@/packages/components/ui/label";
@@ -23,6 +24,8 @@ export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   const [authFormData, setAuthFormData] = useState({
     name: "",
@@ -272,16 +275,30 @@ export default function AuthPage() {
                   </a>
                 )}
               </div>
-              <Input
-                id="password"
-                type="password"
-                placeholder={AUTH_LABELS.PASSWORD_PLACEHOLDER}
-                value={authFormData.password}
-                onChange={handleInputChange("password")}
-                aria-invalid={!!errors.password}
-                disabled={isLoading}
-                className={inputBaseClassName}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder={AUTH_LABELS.PASSWORD_PLACEHOLDER}
+                  value={authFormData.password}
+                  onChange={handleInputChange("password")}
+                  aria-invalid={!!errors.password}
+                  disabled={isLoading}
+                  className={inputBaseClassName}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+                  disabled={isLoading}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
               {errors.password && (
                 <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.password}</p>
               )}
@@ -292,16 +309,30 @@ export default function AuthPage() {
                 <Label htmlFor="confirmPassword" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
                   {AUTH_LABELS.CONFIRM_PASSWORD_LABEL}
                 </Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  placeholder={AUTH_LABELS.PASSWORD_PLACEHOLDER}
-                  value={authFormData.confirmPassword}
-                  onChange={handleInputChange("confirmPassword")}
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder={AUTH_LABELS.PASSWORD_PLACEHOLDER}
+                    value={authFormData.confirmPassword}
+                    onChange={handleInputChange("confirmPassword")}
                   aria-invalid={!!errors.confirmPassword}
                   disabled={isLoading}
                   className={inputBaseClassName}
-                />
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+                    disabled={isLoading}
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
                 {errors.confirmPassword && (
                   <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                     {errors.confirmPassword}

@@ -153,7 +153,7 @@ export function NotificationItem({
   );
 }
 
-export function NotificationEmptyState() {
+export function NotificationEmptyState({ message }: { message?: string }) {
   return (
     <motion.div 
       className="py-16 text-center"
@@ -180,10 +180,14 @@ export function NotificationEmptyState() {
         </svg>
       </motion.div>
       <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50 mb-1">
-        All caught up!
+        {message || "All caught up!"}
       </p>
       <p className="text-xs text-zinc-500">
-        No new notifications right now
+        {message?.includes("unread") 
+          ? "No unread notifications right now"
+          : message?.includes("No notifications") 
+            ? "When you have updates about your trips, they'll appear here"
+            : "No new notifications right now"}
       </p>
     </motion.div>
   );

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
-import dbConnect from "@/backend/config/database";
-import User from "@/backend/models/User";
+import prisma from "@/backend/config/prisma";
 
 // GET - Fetch user profile
 export async function GET(req: NextRequest) {
@@ -16,11 +15,19 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    await dbConnect();
-
-    const user = await User.findOne({ email: token.email }).select(
-      "-password"
-    );
+    const user = await prisma.user.findUnique({
+      where: { email: token.email as string },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        profilePhoto: true,
+        city: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
     if (!user) {
       return NextResponse.json(
@@ -78,19 +85,26 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    await dbConnect();
-
     // Update user profile
-    const updatedUser = await User.findOneAndUpdate(
-      { email: token.email },
-      {
+    const updatedUser = await prisma.user.update({
+      where: { email: token.email as string },
+      data: {
         name: name.trim(),
         phone: phone.trim(),
         profilePhoto: profilePhoto?.trim() || "",
         city: city?.trim() || "",
       },
-      { new: true, runValidators: true }
-    ).select("-password");
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        profilePhoto: true,
+        city: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
     if (!updatedUser) {
       return NextResponse.json(

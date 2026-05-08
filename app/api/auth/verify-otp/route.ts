@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/backend/config/db";
-import User from "@/backend/models/User";
+import prisma from "@/backend/config/prisma";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
-    await connectDB();
-
     const { email, otp } = await req.json();
 
     if (!email || !otp) {
@@ -17,7 +14,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
 
     if (!user || !user.resetOTP || !user.resetOTPExpiry) {
       return NextResponse.json(
@@ -27,9 +26,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (new Date() > user.resetOTPExpiry) {
-      user.resetOTP = undefined;
-      user.resetOTPExpiry = undefined;
-      await user.save();
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          resetOTP: null,
+          resetOTPExpiry: null,
+        },
+      });
       return NextResponse.json(
         { success: false, message: "OTP has expired. Please request a new one." },
         { status: 400 }

@@ -17,7 +17,7 @@ import { PROFILE_LABELS, PROFILE_MESSAGES } from "./constants";
 import { User, Phone, MapPin, Image as ImageIcon, Loader2 } from "lucide-react";
 
 export default function ProfilePage() {
-  const { data: session } = useSession();
+  const { data: session, update } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [profilePhoto, setProfilePhoto] = useState("");
@@ -100,6 +100,11 @@ export default function ProfilePage() {
 
       toast.success(PROFILE_MESSAGES.UPDATE_SUCCESS);
       setProfilePhoto(data.profilePhoto || "");
+      
+      // Update session to refresh name in dashboard
+      await update({
+        name: data.name,
+      });
     } catch (error) {
       console.error("Profile update error:", error);
       toast.error(PROFILE_MESSAGES.UPDATE_ERROR);

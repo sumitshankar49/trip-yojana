@@ -1,12 +1,12 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import connectDB from "@/backend/config/db";
-import User from "@/backend/models/User";
+import prisma from "@/backend/config/prisma";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     CredentialsProvider({
+      id: "credentials",
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
@@ -14,20 +14,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Email and password are required");
+          return null;
         }
 
         try {
-          // Connect to database
-          await connectDB();
-
           // Find user by email
-          const user = await User.findOne({
-            email: (credentials.email as string).toLowerCase(),
+          const user = await prisma.user.findUnique({
+            where: {
+              email: (credentials.email as string).toLowerCase(),
+            },
           });
 
           if (!user) {
-            throw new Error("Invalid email or password");
+            return null;
           }
 
           // Verify password
@@ -37,19 +36,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           );
 
           if (!isPasswordValid) {
-            throw new Error("Invalid email or password");
+            return null;
           }
 
           // Return user object (exclude password)
           return {
-            id: user._id.toString(),
+            id: String(user.id),
             email: user.email,
             name: user.name || "",
           };
         } catch (error: unknown) {
           console.error("Login error:", error);
-          const errorMessage = error instanceof Error ? error.message : "Authentication failed";
-          throw new Error(errorMessage);
+          return null;
         }
       },
     }),
@@ -63,23 +61,35 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     error: "/auth",
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
-        token.id = user.id;
+        token.id = String(user.id);
         token.email = user.email;
         token.name = user.name;
       }
+      
+      // Update token when session.update() is called from profile page
+      if (trigger === "update" && session) {
+        if (session.name) token.name = session.name;
+      }
+      
       return token;
     },
     async session({ session, token }) {
-      if (token && session.user) {
-        session.user.id = token.id as string;
-        session.user.email = token.email as string;
-        session.user.name = token.name as string;
+      if (token) {
+        return {
+          ...session,
+          user: {
+            id: token.id as string,
+            email: token.email as string,
+            name: token.name as string,
+          },
+        };
       }
       return session;
     },
   },
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
+  trustHost: true,
 });

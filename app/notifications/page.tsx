@@ -1,108 +1,127 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import Navbar from "@/packages/components/shared/Navbar";
 import { Button } from "@/packages/components/ui/button";
 import { Badge } from "@/packages/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/packages/components/ui/tabs";
 import { NotificationItem, NotificationEmptyState, type Notification } from "@/packages/components/shared/NotificationItem";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
-const ALL_NOTIFICATIONS: Notification[] = [
-  {
-    id: "1",
-    type: "expense",
-    title: "New Expense Added",
-    message: "Rahul added ₹1,200 for hotel booking in Golden Temple trip",
-    time: "5 min ago",
-    isRead: false,
-    link: "/expenses",
-  },
-  {
-    id: "2",
-    type: "payment_reminder",
-    title: "Payment Reminder",
-    message: "You owe Priya ₹500 for restaurant bill",
-    time: "1 hour ago",
-    isRead: false,
-    link: "/expenses",
-  },
-  {
-    id: "3",
-    type: "trip_update",
-    title: "Trip Dates Modified",
-    message: "Golden Temple trip has been rescheduled to next month",
-    time: "2 hours ago",
-    isRead: false,
-    link: "/dashboard",
-  },
-  {
-    id: "4",
-    type: "booking",
-    title: "Hotel Booking Confirmed",
-    message: "Your hotel booking for Amritsar has been confirmed",
-    time: "5 hours ago",
-    isRead: true,
-    link: "/itinerary",
-  },
-  {
-    id: "5",
-    type: "expense",
-    title: "Expense Split Updated",
-    message: "Amit updated the taxi fare split for airport transfer",
-    time: "1 day ago",
-    isRead: true,
-    link: "/expenses",
-  },
-  {
-    id: "6",
-    type: "itinerary",
-    title: "New Activity Added",
-    message: "Sneha added 'Visit Wagah Border' to the itinerary",
-    time: "1 day ago",
-    isRead: true,
-    link: "/itinerary",
-  },
-  {
-    id: "7",
-    type: "alert",
-    title: "Budget Alert",
-    message: "You're approaching 80% of your trip budget",
-    time: "2 days ago",
-    isRead: true,
-    link: "/budget",
-  },
-  {
-    id: "8",
-    type: "trip_update",
-    title: "New Member Added",
-    message: "Kavya joined your Kedarnath trip",
-    time: "3 days ago",
-    isRead: true,
-    link: "/dashboard",
-  },
-];
+function formatTimeAgo(date: string): string {
+  const now = new Date();
+  const notifDate = new Date(date);
+  const diffInSeconds = Math.floor((now.getTime() - notifDate.getTime()) / 1000);
+
+  if (diffInSeconds < 60) {
+    return "Just now";
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60);
+    return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600);
+    return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  } else if (diffInSeconds < 604800) {
+    const days = Math.floor(diffInSeconds / 86400);
+    return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+  } else {
+    return notifDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+}
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<Notification[]>(ALL_NOTIFICATIONS);
+  const router = useRouter();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [filter]);
+
+  const loadNotifications = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/notifications?filter=${filter}`, {
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data?.message || "Failed to load notifications");
+        setNotifications([]);
+        return;
+      }
+
+      const formattedNotifications = data.notifications.map((notif: any) => ({
+        id: notif.id,
+        type: notif.type,
+        title: notif.title,
+        message: notif.message,
+        time: formatTimeAgo(notif.createdAt),
+        isRead: notif.isRead,
+        link: notif.link || "#",
+      }));
+
+      setNotifications(formattedNotifications);
+    } catch (error) {
+      console.error("Load notifications error:", error);
+      toast.error("Failed to load notifications");
+      setNotifications([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  const handleMarkAsRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-    );
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      const response = await fetch(`/api/notifications/${id}`, {
+        method: "PATCH",
+      });
+
+      if (!response.ok) {
+        toast.error("Failed to mark notification as read");
+        return;
+      }
+
+      // Update local state
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+      );
+    } catch (error) {
+      console.error("Mark as read error:", error);
+      toast.error("Failed to mark notification as read");
+    }
   };
 
-  const handleMarkAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  const handleMarkAllAsRead = async () => {
+    try {
+      const response = await fetch("/api/notifications/mark-all-read", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        toast.error("Failed to mark all as read");
+        return;
+      }
+
+      toast.success("All notifications marked as read");
+      
+      // Update local state
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    } catch (error) {
+      console.error("Mark all as read error:", error);
+      toast.error("Failed to mark all as read");
+    }
   };
 
-  const filteredNotifications = 
-    filter === "unread" 
-      ? notifications.filter((n) => !n.isRead)
-      : notifications;
+  const filteredNotifications = notifications;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -124,11 +143,12 @@ export default function NotificationsPage() {
                 Stay updated with your trip activities
               </p>
             </div>
-            {unreadCount > 0 && (
+            {unreadCount > 0 && !isLoading && (
               <Button
                 onClick={handleMarkAllAsRead}
                 variant="outline"
                 className="gap-2"
+                disabled={isLoading}
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -150,15 +170,17 @@ export default function NotificationsPage() {
           {/* Tabs */}
           <Tabs value={filter} onValueChange={(v) => setFilter(v as "all" | "unread")} className="w-full">
             <TabsList className="w-full sm:w-auto">
-              <TabsTrigger value="all" className="flex-1 sm:flex-none gap-2">
+              <TabsTrigger value="all" className="flex-1 sm:flex-none gap-2" disabled={isLoading}>
                 All
-                <Badge variant="secondary" className="h-5 px-2">
-                  {notifications.length}
-                </Badge>
+                {!isLoading && (
+                  <Badge variant="secondary" className="h-5 px-2">
+                    {notifications.length}
+                  </Badge>
+                )}
               </TabsTrigger>
-              <TabsTrigger value="unread" className="flex-1 sm:flex-none gap-2">
+              <TabsTrigger value="unread" className="flex-1 sm:flex-none gap-2" disabled={isLoading}>
                 Unread
-                {unreadCount > 0 && (
+                {!isLoading && unreadCount > 0 && (
                   <Badge className="h-5 px-2 bg-primary text-primary-foreground">
                     {unreadCount}
                   </Badge>
@@ -167,8 +189,12 @@ export default function NotificationsPage() {
             </TabsList>
 
             <TabsContent value="all" className="mt-6">
-              {filteredNotifications.length === 0 ? (
-                <NotificationEmptyState />
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : filteredNotifications.length === 0 ? (
+                <NotificationEmptyState message={filter === "unread" ? "No unread notifications" : "No notifications yet"} />
               ) : (
                 <motion.div
                   className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden"
@@ -189,8 +215,12 @@ export default function NotificationsPage() {
             </TabsContent>
 
             <TabsContent value="unread" className="mt-6">
-              {filteredNotifications.length === 0 ? (
-                <NotificationEmptyState />
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : filteredNotifications.length === 0 ? (
+                <NotificationEmptyState message="No unread notifications" />
               ) : (
                 <motion.div
                   className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden"

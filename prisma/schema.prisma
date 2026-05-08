@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String         @id @default(cuid())
+  email          String         @unique
+  password       String
+  name           String?
+  phone          String?
+  profilePhoto   String?
+  city           String?
+  resetOTP       String?
+  resetOTPExpiry DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  notifications  Notification[]
+  trips          Trip[]
+
+  @@map("users")
+}
+
+model Trip {
+  id          String      @id @default(cuid())
+  userId      String
+  title       String
+  source      String?
+  destination String
+  startDate   DateTime
+  endDate     DateTime
+  budget      Float
+  travelType  String?
+  places      String[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  budgets     Budget[]
+  expenses    Expense[]
+  itineraries Itinerary[]
+  tripPlaces  TripPlace[]
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("trips")
+}
+
+model TripPlace {
+  id          String   @id @default(cuid())
+  tripId      String
+  name        String
+  description String?
+  lat         Float
+  lng         Float
+  category    String
+  address     String?
+  time        String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@map("trip_places")
+}
+
+model Budget {
+  id        String   @id @default(cuid())
+  tripId    String
+  category  String
+  allocated Float
+  spent     Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@map("budgets")
+}
+
+model Expense {
+  id        String   @id @default(cuid())
+  tripId    String
+  title     String
+  amount    Float
+  category  String
+  paidBy    String
+  splitWith String[] @default([])
+  date      DateTime @default(now())
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@map("expenses")
+}
+
+model Itinerary {
+  id         String   @id @default(cuid())
+  tripId     String
+  dayNumber  Int
+  date       DateTime
+  activities Json     @default("[]")
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  trip       Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, dayNumber])
+  @@index([tripId])
+  @@map("itineraries")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@map("notifications")
+}

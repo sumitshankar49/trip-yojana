@@ -180,19 +180,20 @@ export function MapComponent({ places, focusPlace }: MapComponentProps) {
   }
 
   return (
-    <MapContainer
-      center={center}
-      zoom={zoom}
-      style={{ height: "100%", width: "100%" }}
-      className="z-0"
-    >
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-      />
+    <div className="relative h-full w-full">
+      <MapContainer
+        center={center}
+        zoom={zoom}
+        style={{ height: "100%", width: "100%" }}
+        className="z-0"
+      >
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        />
 
-      <FitBounds places={places} skipFit={!!focusPlace} />
-      <ZoomToPlace places={places} focusPlace={focusPlace} />
+        <FitBounds places={places} skipFit={!!focusPlace} />
+        <ZoomToPlace places={places} focusPlace={focusPlace} />
 
       {/* Polyline connecting places */}
       {positions.length > 1 && (
@@ -231,6 +232,7 @@ export function MapComponent({ places, focusPlace }: MapComponentProps) {
         </Marker>
       ))}
     </MapContainer>
+    </div>
   );
 }
 

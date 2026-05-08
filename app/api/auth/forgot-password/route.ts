@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/backend/config/db";
-import User from "@/backend/models/User";
+import prisma from "@/backend/config/prisma";
 import { sendOTPEmail } from "@/backend/lib/mailer";
 
 export const runtime = "nodejs";
@@ -16,8 +15,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await connectDB();
-
     const { email } = await req.json();
 
     if (!email) {
@@ -35,7 +32,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
 
     // Always return success to prevent user enumeration
     if (!user) {
@@ -52,9 +51,14 @@ export async function POST(req: NextRequest) {
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    user.resetOTP = otp;
-    user.resetOTPExpiry = otpExpiry;
-    await user.save();
+    // Update user with OTP
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetOTP: otp,
+        resetOTPExpiry: otpExpiry,
+      },
+    });
 
     try {
       await sendOTPEmail(user.email, otp);

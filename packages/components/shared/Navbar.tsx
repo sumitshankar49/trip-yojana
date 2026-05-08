@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -22,7 +22,7 @@ import UserButton from "@/packages/components/auth/UserButton";
 
 interface Notification {
   id: string;
-  type: "expense" | "payment_reminder" | "trip_update" | "itinerary";
+  type: "expense" | "payment_reminder" | "trip_update" | "itinerary" | "booking" | "alert";
   title: string;
   message: string;
   time: string;
@@ -30,50 +30,34 @@ interface Notification {
   link?: string;
 }
 
-const DUMMY_NOTIFICATIONS: Notification[] = [
-  {
-    id: "1",
-    type: "expense",
-    title: "New Expense Added",
-    message: "Rahul added ₹1,200 for hotel booking",
-    time: "5 min ago",
-    isRead: false,
-    link: "/expenses",
-  },
-  {
-    id: "2",
-    type: "payment_reminder",
-    title: "Payment Reminder",
-    message: "You owe Priya ₹500 for restaurant bill",
-    time: "1 hour ago",
-    isRead: false,
-    link: "/expenses",
-  },
-  {
-    id: "3",
-    type: "expense",
-    title: "Expense Split Updated",
-    message: "Amit updated the taxi fare split",
-    time: "2 hours ago",
-    isRead: true,
-    link: "/expenses",
-  },
-  {
-    id: "4",
-    type: "trip_update",
-    title: "Trip Details Updated",
-    message: "Golden Temple trip dates have been modified",
-    time: "1 day ago",
-    isRead: true,
-    link: "/dashboard",
-  },
-];
+function formatTimeAgo(date: string): string {
+  const now = new Date();
+  const notifDate = new Date(date);
+  const diffInSeconds = Math.floor((now.getTime() - notifDate.getTime()) / 1000);
+
+  if (diffInSeconds < 60) {
+    return "Just now";
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60);
+    return `${minutes} ${minutes === 1 ? 'min' : 'mins'} ago`;
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600);
+    return `${hours} ${hours === 1 ? 'hr' : 'hrs'} ago`;
+  } else if (diffInSeconds < 604800) {
+    const days = Math.floor(diffInSeconds / 86400);
+    return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+  } else {
+    return notifDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+}
 
 const NOTIFICATION_ICONS = {
   expense: "💰",
   payment_reminder: "🔔",
   trip_update: "✈️",
   itinerary: "📅",
+  booking: "🏨",
+  alert: "⚠️",
 };
 
 interface NavLink {
@@ -85,19 +69,78 @@ interface NavLink {
 
 export default function Navbar() {
   const pathname = usePathname();
-  const [notifications, setNotifications] = useState<Notification[]>(DUMMY_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (isNotificationsOpen) {
+      loadNotifications();
+    }
+  }, [isNotificationsOpen]);
+
+  const loadNotifications = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/notifications?filter=unread', {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        setNotifications([]);
+        return;
+      }
+
+      const data = await response.json();
+      const formattedNotifications = data.notifications.slice(0, 5).map((notif: any) => ({
+        id: notif.id,
+        type: notif.type,
+        title: notif.title,
+        message: notif.message,
+        time: formatTimeAgo(notif.createdAt),
+        isRead: notif.isRead,
+        link: notif.link || "#",
+      }));
+
+      setNotifications(formattedNotifications);
+    } catch (error) {
+      console.error("Load notifications error:", error);
+      setNotifications([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  const handleMarkAsRead = (notificationId: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n))
-    );
+  const handleMarkAsRead = async (notificationId: string) => {
+    try {
+      const response = await fetch(`/api/notifications/${notificationId}`, {
+        method: "PATCH",
+      });
+
+      if (response.ok) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n))
+        );
+      }
+    } catch (error) {
+      console.error("Mark as read error:", error);
+    }
   };
 
-  const handleMarkAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  const handleMarkAllAsRead = async () => {
+    try {
+      const response = await fetch("/api/notifications/mark-all-read", {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      }
+    } catch (error) {
+      console.error("Mark all as read error:", error);
+    }
   };
 
   const navLinks: NavLink[] = [
