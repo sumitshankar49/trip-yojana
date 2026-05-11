@@ -1,18 +1,27 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import React, { useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/packages/components/ui/card";
-import { Input } from "@/packages/components/ui/input";
-import { Label } from "@/packages/components/ui/label";
 import { Button } from "@/packages/components/ui/button";
+import { Form } from "@/packages/components/ui/form";
 import { AuthMode, FormErrors } from "./types";
 import { AUTH_LABELS, AUTH_MESSAGES } from "./constants";
 import { validateName, validateEmail, validatePassword, validateConfirmPassword } from "./validations";
+import { FormPageViewSingleInputLayout } from "@/packages/components/shared/form/FormPageViewSingleInputLayout";
+import { InputFieldControlled } from "@/packages/components/shared/form/InputFieldControlled";
+import { useForm } from "react-hook-form";
+
+type AuthFormValues = {
+  name: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+};
 
 export default function AuthPage() {
   const router = useRouter();
@@ -21,43 +30,61 @@ export default function AuthPage() {
   const [mode, setMode] = useState<AuthMode>(
     requestedMode === "signup" || requestedMode === "login" ? requestedMode : "login"
   );
+  const form = useForm<AuthFormValues>({
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+    },
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
-  const [authFormData, setAuthFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-  });
 
   const inputBaseClassName = "h-12 bg-white dark:bg-zinc-800 border-2 border-zinc-200 dark:border-zinc-700 focus:border-cyan-500 focus:ring-cyan-500 rounded-lg transition-all duration-300 focus:scale-[1.01]";
 
+  const clearFieldError = (field: keyof FormErrors) => {
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: undefined }));
+    }
+    if (serverError) setServerError("");
+  };
+
+  const clearAllFormValues = () => {
+    form.reset({
+      name: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+    });
+  };
+
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
+    const formValues = form.getValues();
 
     // Name validation (only for signup)
     if (mode === "signup") {
-      const nameError = validateName(authFormData.name);
+      const nameError = validateName(formValues.name);
       if (nameError) newErrors.name = nameError;
     }
 
     // Email validation
-    const emailError = validateEmail(authFormData.email);
+    const emailError = validateEmail(formValues.email);
     if (emailError) newErrors.email = emailError;
 
     // Password validation
-    const passwordError = validatePassword(authFormData.password);
+    const passwordError = validatePassword(formValues.password);
     if (passwordError) newErrors.password = passwordError;
 
     // Confirm password validation (only for signup)
     if (mode === "signup") {
       const confirmPasswordError = validateConfirmPassword(
-        authFormData.password,
-        authFormData.confirmPassword
+        formValues.password,
+        formValues.confirmPassword
       );
       if (confirmPasswordError) newErrors.confirmPassword = confirmPasswordError;
     }
@@ -66,7 +93,7 @@ export default function AuthPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     if (!validateForm()) {
@@ -84,9 +111,9 @@ export default function AuthPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            name: authFormData.name,
-            email: authFormData.email,
-            password: authFormData.password,
+            name: form.getValues("name"),
+            email: form.getValues("email"),
+            password: form.getValues("password"),
           }),
         });
 
@@ -103,15 +130,20 @@ export default function AuthPage() {
         // Switch to login mode after successful registration
         setMode("login");
         router.replace("/auth?mode=login");
-        setAuthFormData({ name: "", email: authFormData.email, password: "", confirmPassword: "" });
+        form.reset({
+          name: "",
+          email: form.getValues("email"),
+          password: "",
+          confirmPassword: "",
+        });
         setErrors({});
         setServerError("");
         setIsLoading(false);
       } else {
         // Login existing user
         const result = await signIn("credentials", {
-          email: authFormData.email,
-          password: authFormData.password,
+          email: form.getValues("email"),
+          password: form.getValues("password"),
           redirect: false,
         });
 
@@ -129,7 +161,7 @@ export default function AuthPage() {
           toast.success("Login successful!");
           
           // Reset form
-          setAuthFormData({ name: "", email: "", password: "", confirmPassword: "" });
+          clearAllFormValues();
           setErrors({});
           
           // Navigate to dashboard
@@ -150,18 +182,7 @@ export default function AuthPage() {
     router.replace(`/auth?mode=${nextMode}`);
     setErrors({});
     setServerError("");
-    setAuthFormData({ name: "", email: "", password: "", confirmPassword: "" });
-  };
-
-  const handleInputChange = (field: keyof typeof authFormData) => (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setAuthFormData((prev) => ({ ...prev, [field]: e.target.value }));
-    // Clear field and server error when user starts typing
-    if (errors[field as keyof FormErrors]) {
-      setErrors((prev) => ({ ...prev, [field]: undefined }));
-    }
-    if (serverError) setServerError("");
+    clearAllFormValues();
   };
 
   return (
@@ -212,6 +233,7 @@ export default function AuthPage() {
             <p className="text-sm text-zinc-600 dark:text-zinc-400">{AUTH_LABELS.TAGLINE}</p>
           </div>
 
+          <Form {...form}>
           <Card className="border border-zinc-200 dark:border-zinc-800 shadow-2xl bg-white dark:bg-zinc-900 rounded-2xl animate-fade-in-up animation-delay-200">
             <CardHeader key={`header-${mode}`} className="space-y-1 pb-6 px-8 pt-8 animate-fade-in animation-delay-400">
               <CardTitle className="text-2xl font-bold text-center text-zinc-900 dark:text-white transition-all duration-300">
@@ -220,138 +242,122 @@ export default function AuthPage() {
             </CardHeader>
         
         <form onSubmit={handleSubmit}>
-          <CardContent key={`content-${mode}`} className="space-y-4 px-8 animate-fade-in-up animation-delay-200">
-            {mode === "signup" && (
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
-                  {AUTH_LABELS.NAME_LABEL}
-                </Label>
-                <Input
-                  id="name"
-                  name="name"
-                  type="text"
-                  autoComplete="name"
-                  placeholder={AUTH_LABELS.NAME_PLACEHOLDER}
-                  value={authFormData.name}
-                  onChange={handleInputChange("name")}
-                  aria-invalid={!!errors.name}
-                  disabled={isLoading}
-                  className={inputBaseClassName}
-                  required
-                />
-                {errors.name && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.name}</p>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
-                {AUTH_LABELS.EMAIL_LABEL}
-              </Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                placeholder={AUTH_LABELS.EMAIL_PLACEHOLDER}
-                value={authFormData.email}
-                onChange={handleInputChange("email")}
-                aria-invalid={!!errors.email}
-                disabled={isLoading}
-                className={inputBaseClassName}
-                required
-              />
-              {errors.email && (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.email}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
-                  {AUTH_LABELS.PASSWORD_LABEL}
-                </Label>
-                {mode === "login" && (
-                  <a
-                    href="/forgot-password"
-                    className="text-xs text-cyan-600 dark:text-cyan-500 hover:text-cyan-700 dark:hover:text-cyan-400 font-semibold hover:underline underline-offset-2 transition-colors duration-200"
-                  >
-                    Forgot password?
-                  </a>
-                )}
-              </div>
-              <div className="relative">
-                <Input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                  placeholder={AUTH_LABELS.PASSWORD_PLACEHOLDER}
-                  value={authFormData.password}
-                  onChange={handleInputChange("password")}
-                  aria-invalid={!!errors.password}
-                  disabled={isLoading}
-                  className={inputBaseClassName}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
-                  disabled={isLoading}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
-                </button>
-              </div>
-              {errors.password && (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.password}</p>
-              )}
-            </div>
-
-            {mode === "signup" && (
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
-                  {AUTH_LABELS.CONFIRM_PASSWORD_LABEL}
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type={showConfirmPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    placeholder={AUTH_LABELS.PASSWORD_PLACEHOLDER}
-                    value={authFormData.confirmPassword}
-                    onChange={handleInputChange("confirmPassword")}
-                    aria-invalid={!!errors.confirmPassword}
+          <CardContent key={`content-${mode}`} className="px-8 animate-fade-in-up animation-delay-200">
+            <FormPageViewSingleInputLayout height="h-fit">
+              {mode === "signup" && (
+                <div className="space-y-2">
+                  <InputFieldControlled
+                    control={form.control}
+                    name="name"
+                    label={AUTH_LABELS.NAME_LABEL}
+                    placeholder={AUTH_LABELS.NAME_PLACEHOLDER}
+                    type="text"
                     disabled={isLoading}
                     className={inputBaseClassName}
                     required
+                    onChange={() => clearFieldError("name")}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
-                    disabled={isLoading}
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-5 w-5" />
-                    ) : (
-                      <Eye className="h-5 w-5" />
-                    )}
-                  </button>
+                  {errors.name && (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.name}</p>
+                  )}
                 </div>
-                {errors.confirmPassword && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                    {errors.confirmPassword}
-                  </p>
+              )}
+
+              <div className="space-y-2">
+                <InputFieldControlled
+                  control={form.control}
+                  name="email"
+                  label={AUTH_LABELS.EMAIL_LABEL}
+                  placeholder={AUTH_LABELS.EMAIL_PLACEHOLDER}
+                  type="email"
+                  disabled={isLoading}
+                  className={inputBaseClassName}
+                  required
+                  onChange={() => clearFieldError("email")}
+                />
+                {errors.email && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.email}</p>
                 )}
               </div>
-            )}
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
+                    {AUTH_LABELS.PASSWORD_LABEL}
+                  </span>
+                  {mode === "login" && (
+                    <a
+                      href="/forgot-password"
+                      className="text-xs text-cyan-600 dark:text-cyan-500 hover:text-cyan-700 dark:hover:text-cyan-400 font-semibold hover:underline underline-offset-2 transition-colors duration-200"
+                    >
+                      Forgot password?
+                    </a>
+                  )}
+                </div>
+                <InputFieldControlled
+                  control={form.control}
+                  name="password"
+                  placeholder={AUTH_LABELS.PASSWORD_PLACEHOLDER}
+                  type={showPassword ? "text" : "password"}
+                  disabled={isLoading}
+                  className={inputBaseClassName}
+                  required
+                  onChange={() => clearFieldError("password")}
+                  endAdornment={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+                      disabled={isLoading}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
+                    </button>
+                  }
+                />
+                {errors.password && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.password}</p>
+                )}
+              </div>
+
+              {mode === "signup" && (
+                <div className="space-y-2">
+                  <InputFieldControlled
+                    control={form.control}
+                    name="confirmPassword"
+                    label={AUTH_LABELS.CONFIRM_PASSWORD_LABEL}
+                    placeholder={AUTH_LABELS.PASSWORD_PLACEHOLDER}
+                    type={showConfirmPassword ? "text" : "password"}
+                    disabled={isLoading}
+                    className={inputBaseClassName}
+                    required
+                    onChange={() => clearFieldError("confirmPassword")}
+                    endAdornment={
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+                        disabled={isLoading}
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="h-5 w-5" />
+                        ) : (
+                          <Eye className="h-5 w-5" />
+                        )}
+                      </button>
+                    }
+                  />
+                  {errors.confirmPassword && (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                      {errors.confirmPassword}
+                    </p>
+                  )}
+                </div>
+              )}
+            </FormPageViewSingleInputLayout>
           </CardContent>
 
           <CardFooter className="flex flex-col space-y-4 px-8 pb-8 pt-2 animate-fade-in animation-delay-800">
@@ -405,6 +411,7 @@ export default function AuthPage() {
           </CardFooter>
         </form>
       </Card>
+          </Form>
         </div>
       </div>
     </div>

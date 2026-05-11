@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/packages/components/ui/card";
 import { Button } from "@/packages/components/ui/button";
-import { Input } from "@/packages/components/ui/input";
 import { Label } from "@/packages/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/packages/components/ui/select";
 import { Slider } from "@/packages/components/ui/slider";
@@ -16,17 +15,10 @@ import { cn } from "@/packages/lib/utils";
 import { toast } from "sonner";
 import ProtectedRoute from "@/packages/components/auth/ProtectedRoute";
 import { TRIP_LABELS, TRIP_MESSAGES, TRIP_ERRORS } from "./constants";
-import { InputFieldControlled } from "@/packages/components/shared/InputFieldControlled";
+import { InputFieldControlled } from "@/packages/components/shared/form/InputFieldControlled";
+import { Form } from "@/packages/components/ui/form";
+import { FormPageViewTwoInputLayout } from "@/packages/components/shared/form/FormPageViewTwoInputLayout";
 import { MapPin, Navigation } from "lucide-react";
-
-interface TripFormData {
-  source: string;
-  destination: string;
-  startDate: Date | undefined;
-  endDate: Date | undefined;
-  budget: number;
-  travelType: string;
-}
 
 type Step = 1 | 2 | 3;
 
@@ -50,12 +42,13 @@ export default function CreateTripPage() {
   const [dateErrors, setDateErrors] = useState<{ startDate?: string; endDate?: string; travelType?: string }>({});
   
   // React Hook Form for source and destination
-  const { control, handleSubmit: handleFormSubmit, formState: { errors }, watch, setValue } = useForm<{ source: string; destination: string }>({
+  const form = useForm<{ source: string; destination: string }>({
     defaultValues: {
       source: "",
       destination: "",
     },
   });
+  const { control, handleSubmit: handleFormSubmit, watch } = form;
   
   const source = watch("source");
   const destination = watch("destination");
@@ -314,10 +307,11 @@ export default function CreateTripPage() {
             </CardDescription>
             </CardHeader>
 
+            <Form {...form}>
             <CardContent className="space-y-6 pt-6">
             {/* Step 1: Location */}
             {currentStep === 1 && (
-              <>
+              <FormPageViewTwoInputLayout isWithStepper>
                 <InputFieldControlled
                   control={control}
                   name="source"
@@ -339,7 +333,7 @@ export default function CreateTripPage() {
                   required
                   type="text"
                 />
-              </>
+              </FormPageViewTwoInputLayout>
             )}
 
             {/* Step 2: Dates */}
@@ -380,7 +374,7 @@ export default function CreateTripPage() {
                         selected={startDate}
                         onSelect={handleStartDateChange}
                         disabled={(date) => normalizeDate(date) < normalizeDate(new Date())}
-                        initialFocus
+
                       />
                     </PopoverContent>
                   </Popover>
@@ -429,7 +423,7 @@ export default function CreateTripPage() {
                             ? normalizeDate(date) < normalizeDate(startDate)
                             : false)
                         }
-                        initialFocus
+
                       />
                     </PopoverContent>
                   </Popover>
@@ -526,6 +520,7 @@ export default function CreateTripPage() {
               </>
             )}
             </CardContent>
+            </Form>
 
             <CardFooter className="flex flex-col-reverse gap-3 border-t border-zinc-100 pt-5 sm:flex-row sm:justify-between dark:border-zinc-800">
             <Button

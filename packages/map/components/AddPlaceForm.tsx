@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Place } from "../types";
+import { FormPageViewSingleInputLayout } from "@/packages/components/shared/form/FormPageViewSingleInputLayout";
+import { FormPageViewTwoInputLayout } from "@/packages/components/shared/form/FormPageViewTwoInputLayout";
 
 interface AddPlaceFormProps {
   tripId: string;
@@ -223,55 +225,57 @@ export function AddPlaceForm({ tripId, onPlaceAdded, onMapClick }: AddPlaceFormP
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-            Place Name *
-          </label>
-          <input
-            type="text"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="e.g., Golden Temple"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-            Description
-          </label>
-          <input
-            type="text"
-            value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="Brief description"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-            Address
-          </label>
-          <div className="space-y-2">
+        <FormPageViewSingleInputLayout height="h-fit">
+          <div>
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+              Place Name *
+            </label>
             <input
               type="text"
-              value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="e.g., Patna Junction, Patna"
+              placeholder="e.g., Golden Temple"
+              required
             />
-            <button
-              type="button"
-              onClick={geocodeLocation}
-              disabled={isGeocoding || (!formData.name && !formData.address)}
-              className="w-full px-3 py-1.5 text-xs font-medium text-primary border border-primary rounded-lg hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isGeocoding ? "Finding..." : "🔍 Find Coordinates"}
-            </button>
           </div>
-        </div>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+              Description
+            </label>
+            <input
+              type="text"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="Brief description"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+              Address
+            </label>
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="e.g., Patna Junction, Patna"
+              />
+              <button
+                type="button"
+                onClick={geocodeLocation}
+                disabled={isGeocoding || (!formData.name && !formData.address)}
+                className="w-full px-3 py-1.5 text-xs font-medium text-primary border border-primary rounded-lg hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isGeocoding ? "Finding..." : "🔍 Find Coordinates"}
+              </button>
+            </div>
+          </div>
+        </FormPageViewSingleInputLayout>
 
         {/* Manual Coordinates Section */}
         {showManualCoords && (
@@ -332,35 +336,37 @@ export function AddPlaceForm({ tripId, onPlaceAdded, onMapClick }: AddPlaceFormP
           </button>
         )}
 
-        <div>
-          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-            Category *
-          </label>
-          <select
-            value={formData.category}
-            onChange={(e) => setFormData({ ...formData, category: e.target.value as Place["category"] })}
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            required
-          >
-            <option value="attraction">Attraction</option>
-            <option value="restaurant">Restaurant</option>
-            <option value="hotel">Hotel</option>
-            <option value="activity">Activity</option>
-          </select>
-        </div>
+        <FormPageViewTwoInputLayout height="h-fit">
+          <div>
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+              Category *
+            </label>
+            <select
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value as Place["category"] })}
+              className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              required
+            >
+              <option value="attraction">Attraction</option>
+              <option value="restaurant">Restaurant</option>
+              <option value="hotel">Hotel</option>
+              <option value="activity">Activity</option>
+            </select>
+          </div>
 
-        <div>
-          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-            Visit Time
-          </label>
-          <input
-            type="text"
-            value={formData.time}
-            onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="e.g., 10:00 AM"
-          />
-        </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+              Visit Time
+            </label>
+            <input
+              type="text"
+              value={formData.time}
+              onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+              className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="e.g., 10:00 AM"
+            />
+          </div>
+        </FormPageViewTwoInputLayout>
 
         <div className="flex gap-2 pt-2">
           <button

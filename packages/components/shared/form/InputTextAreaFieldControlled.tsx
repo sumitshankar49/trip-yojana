@@ -54,8 +54,7 @@ export const InputTextAreaFieldControlled = <
           {label ? (
             <FormLabel>
               {icon && <span className="mr-1">{icon}</span>}
-              {label}{" "}
-              {required ? <span className="text-destructive"> * </span> : ""}
+              {label} {required ? <span className="text-destructive"> * </span> : ""}
             </FormLabel>
           ) : (
             ""

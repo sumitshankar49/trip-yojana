@@ -15,7 +15,10 @@ import { profileSchema, ProfileFormData } from "./validations";
 import { ProfileData } from "./types";
 import { PROFILE_LABELS, PROFILE_MESSAGES } from "./constants";
 import { User, Phone, MapPin, Image as ImageIcon, Loader2 } from "lucide-react";
-import { InputFieldControlled } from "@/packages/components/shared/InputFieldControlled";
+import { InputFieldControlled } from "@/packages/components/shared/form/InputFieldControlled";
+import { Form } from "@/packages/components/ui/form";
+import { FormPageViewSingleInputLayout } from "@/packages/components/shared/form/FormPageViewSingleInputLayout";
+import { FormPageViewTwoInputLayout } from "@/packages/components/shared/form/FormPageViewTwoInputLayout";
 
 export default function ProfilePage() {
   const { data: session, update } = useSession();
@@ -23,14 +26,7 @@ export default function ProfilePage() {
   const [isFetching, setIsFetching] = useState(true);
   const [profilePhoto, setProfilePhoto] = useState("");
 
-  const {
-    register,
-    control,
-    handleSubmit,
-    formState: { errors },
-    setValue,
-    watch,
-  } = useForm<ProfileFormData>({
+  const form = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
       name: "",
@@ -40,6 +36,8 @@ export default function ProfilePage() {
     },
   });
 
+  const { control, handleSubmit, setValue, watch } = form;
+
   const watchedPhoto = watch("profilePhoto");
 
   // Fetch profile data on mount
@@ -47,7 +45,7 @@ export default function ProfilePage() {
     const fetchProfile = async () => {
       try {
         const response = await fetch("/api/profile");
-        
+
         if (!response.ok) {
           throw new Error("Failed to fetch profile");
         }
@@ -55,7 +53,6 @@ export default function ProfilePage() {
         const data = await response.json();
         const profile: ProfileData = data.profile;
 
-        // Set form values
         setValue("name", profile.name || "");
         setValue("phone", profile.phone || "");
         setValue("profilePhoto", profile.profilePhoto || "");
@@ -176,71 +173,74 @@ export default function ProfilePage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            <Form {...form}>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-              {/* Name Field */}
-              <InputFieldControlled
-                control={control}
-                name="name"
-                label={PROFILE_LABELS.NAME_LABEL}
-                placeholder={PROFILE_LABELS.NAME_PLACEHOLDER}
-                icon={<User className="h-4 w-4" />}
-                disabled={isLoading}
-                required
-                type="text"
-              />
-
-              {/* Email Field (Read-only) */}
-              <div className="space-y-2">
-                <Label htmlFor="email" className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  {PROFILE_LABELS.EMAIL_LABEL}
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={session?.user?.email || ""}
-                  disabled
-                  className="h-11 bg-zinc-100 dark:bg-zinc-800 cursor-not-allowed"
+              {/* Name + Phone side by side */}
+              <FormPageViewTwoInputLayout>
+                <InputFieldControlled
+                  control={control}
+                  name="name"
+                  label={PROFILE_LABELS.NAME_LABEL}
+                  placeholder={PROFILE_LABELS.NAME_PLACEHOLDER}
+                  icon={<User className="h-4 w-4" />}
+                  disabled={isLoading}
+                  required
+                  type="text"
                 />
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Email cannot be changed
-                </p>
-              </div>
+                <InputFieldControlled
+                  control={control}
+                  name="phone"
+                  label={PROFILE_LABELS.PHONE_LABEL}
+                  placeholder={PROFILE_LABELS.PHONE_PLACEHOLDER}
+                  icon={<Phone className="h-4 w-4" />}
+                  disabled={isLoading}
+                  required
+                  type="tel"
+                />
+              </FormPageViewTwoInputLayout>
 
-              {/* Phone Field */}
-              <InputFieldControlled
-                control={control}
-                name="phone"
-                label={PROFILE_LABELS.PHONE_LABEL}
-                placeholder={PROFILE_LABELS.PHONE_PLACEHOLDER}
-                icon={<Phone className="h-4 w-4" />}
-                disabled={isLoading}
-                required
-                type="tel"
-              />
+              {/* Email (read-only) + City side by side */}
+              <FormPageViewTwoInputLayout>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    {PROFILE_LABELS.EMAIL_LABEL}
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={session?.user?.email || ""}
+                    disabled
+                    className="h-11 bg-zinc-100 dark:bg-zinc-800 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Email cannot be changed
+                  </p>
+                </div>
+                <InputFieldControlled
+                  control={control}
+                  name="city"
+                  label={PROFILE_LABELS.CITY_LABEL}
+                  placeholder={PROFILE_LABELS.CITY_PLACEHOLDER}
+                  icon={<MapPin className="h-4 w-4" />}
+                  disabled={isLoading}
+                  type="text"
+                />
+              </FormPageViewTwoInputLayout>
 
-              {/* Profile Photo URL Field */}
-              <InputFieldControlled
-                control={control}
-                name="profilePhoto"
-                label={PROFILE_LABELS.PROFILE_PHOTO_LABEL}
-                placeholder={PROFILE_LABELS.PROFILE_PHOTO_PLACEHOLDER}
-                icon={<ImageIcon className="h-4 w-4" />}
-                disabled={isLoading}
-                type="url"
-                description="Enter a valid image URL to display your profile photo"
-              />
-
-              {/* City Field */}
-              <InputFieldControlled
-                control={control}
-                name="city"
-                label={PROFILE_LABELS.CITY_LABEL}
-                placeholder={PROFILE_LABELS.CITY_PLACEHOLDER}
-                icon={<MapPin className="h-4 w-4" />}
-                disabled={isLoading}
-                type="text"
-              />
+              {/* Profile Photo URL — full width, URL strings need space */}
+              <FormPageViewSingleInputLayout>
+                <InputFieldControlled
+                  control={control}
+                  name="profilePhoto"
+                  label={PROFILE_LABELS.PROFILE_PHOTO_LABEL}
+                  placeholder={PROFILE_LABELS.PROFILE_PHOTO_PLACEHOLDER}
+                  icon={<ImageIcon className="h-4 w-4" />}
+                  disabled={isLoading}
+                  type="url"
+                  description="Enter a valid image URL to display your profile photo"
+                />
+              </FormPageViewSingleInputLayout>
 
               {/* Submit Button */}
               <Button
@@ -258,6 +258,7 @@ export default function ProfilePage() {
                 )}
               </Button>
             </form>
+            </Form>
           </CardContent>
         </Card>
         </div>

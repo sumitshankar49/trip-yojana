@@ -1,16 +1,25 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/packages/components/ui/card";
-import { Input } from "@/packages/components/ui/input";
-import { Label } from "@/packages/components/ui/label";
 import { Button } from "@/packages/components/ui/button";
+import { Form } from "@/packages/components/ui/form";
+import { FormPageViewSingleInputLayout } from "@/packages/components/shared/form/FormPageViewSingleInputLayout";
+import { InputFieldControlled } from "@/packages/components/shared/form/InputFieldControlled";
+import { useForm } from "react-hook-form";
 
 type Step = "email" | "otp" | "reset" | "success";
+
+type ForgotPasswordFormValues = {
+  email: string;
+  otp: string;
+  newPassword: string;
+  confirmPassword: string;
+};
 
 const inputBaseClassName =
   "h-12 bg-white dark:bg-zinc-800 border-2 border-zinc-200 dark:border-zinc-700 focus:border-cyan-500 focus:ring-cyan-500 rounded-lg transition-all duration-300 focus:scale-[1.01]";
@@ -62,25 +71,29 @@ const BUTTON_LABELS = {
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
+  const form = useForm<ForgotPasswordFormValues>({
+    defaultValues: {
+      email: "",
+      otp: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
+  });
   const [step, setStep] = useState<Step>("email");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // ── Step 1: Send OTP ──────────────────────────────────────────────
-  const handleSendOTP = async (e: FormEvent) => {
+  const handleSendOTP = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
+    const emailValue = form.getValues("email").trim();
 
-    if (!email) newErrors.email = ERROR_MESSAGES.emailRequired;
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    if (!emailValue) newErrors.email = ERROR_MESSAGES.emailRequired;
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue))
       newErrors.email = ERROR_MESSAGES.emailInvalid;
 
     if (Object.keys(newErrors).length > 0) {
@@ -93,7 +106,7 @@ export default function ForgotPasswordPage() {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: emailValue }),
       });
       const data = await res.json();
 
@@ -114,12 +127,13 @@ export default function ForgotPasswordPage() {
   };
 
   // ── Step 2: Verify OTP ────────────────────────────────────────────
-  const handleVerifyOTP = async (e: FormEvent) => {
+  const handleVerifyOTP = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
+    const otpValue = form.getValues("otp");
 
-    if (!otp) newErrors.otp = ERROR_MESSAGES.otpRequired;
-    else if (otp.length !== 6) newErrors.otp = ERROR_MESSAGES.otpLength;
+    if (!otpValue) newErrors.otp = ERROR_MESSAGES.otpRequired;
+    else if (otpValue.length !== 6) newErrors.otp = ERROR_MESSAGES.otpLength;
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -131,7 +145,7 @@ export default function ForgotPasswordPage() {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp }),
+        body: JSON.stringify({ email: form.getValues("email"), otp: otpValue }),
       });
       const data = await res.json();
 
@@ -154,16 +168,18 @@ export default function ForgotPasswordPage() {
   };
 
   // ── Step 3: Reset Password ────────────────────────────────────────
-  const handleResetPassword = async (e: FormEvent) => {
+  const handleResetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
+    const newPasswordValue = form.getValues("newPassword");
+    const confirmPasswordValue = form.getValues("confirmPassword");
 
-    if (!newPassword) newErrors.newPassword = ERROR_MESSAGES.passwordRequired;
-    else if (newPassword.length < 6)
+    if (!newPasswordValue) newErrors.newPassword = ERROR_MESSAGES.passwordRequired;
+    else if (newPasswordValue.length < 6)
       newErrors.newPassword = ERROR_MESSAGES.passwordTooShort;
 
-    if (!confirmPassword) newErrors.confirmPassword = ERROR_MESSAGES.confirmRequired;
-    else if (newPassword !== confirmPassword)
+    if (!confirmPasswordValue) newErrors.confirmPassword = ERROR_MESSAGES.confirmRequired;
+    else if (newPasswordValue !== confirmPasswordValue)
       newErrors.confirmPassword = ERROR_MESSAGES.passwordMismatch;
 
     if (Object.keys(newErrors).length > 0) {
@@ -176,7 +192,11 @@ export default function ForgotPasswordPage() {
       const res = await fetch("/api/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp, newPassword }),
+        body: JSON.stringify({
+          email: form.getValues("email"),
+          otp: form.getValues("otp"),
+          newPassword: newPasswordValue,
+        }),
       });
       const data = await res.json();
 
@@ -206,7 +226,7 @@ export default function ForgotPasswordPage() {
 
   const stepDescriptions: Record<Step, string> = {
     email: "Enter your registered email to receive a one-time password.",
-    otp: `Enter the 6-digit OTP sent to ${email}`,
+    otp: `Enter the 6-digit OTP sent to ${form.watch("email")}`,
     reset: "Choose a new password for your account.",
     success: "Your password has been reset successfully.",
   };
@@ -284,6 +304,7 @@ export default function ForgotPasswordPage() {
           </div>
           )}
 
+          <Form {...form}>
           <Card className="border border-zinc-200 dark:border-zinc-800 shadow-2xl bg-white dark:bg-zinc-900 rounded-2xl animate-fade-in-up animation-delay-200">
             <CardHeader className="space-y-2 pb-4 px-8 pt-8">
               <CardTitle className="text-2xl font-bold text-center text-zinc-900 dark:text-white">
@@ -297,27 +318,26 @@ export default function ForgotPasswordPage() {
             {/* Step 1: Email */}
             {step === "email" && (
               <form onSubmit={handleSendOTP}>
-                <CardContent className="space-y-4 px-8">
-                  <div className="space-y-2">
-                    <Label htmlFor="email" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
-                      {LABELS.email}
-                    </Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder={PLACEHOLDERS.email}
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        if (errors.email) setErrors((p) => ({ ...p, email: "" }));
-                      }}
-                      disabled={isLoading}
-                      className={inputBaseClassName}
-                    />
-                    {errors.email && (
-                      <p className="text-xs text-red-600 dark:text-red-400">{errors.email}</p>
-                    )}
-                  </div>
+                <CardContent className="px-8">
+                  <FormPageViewSingleInputLayout height="h-fit">
+                    <div className="space-y-2">
+                      <InputFieldControlled
+                        control={form.control}
+                        name="email"
+                        label={LABELS.email}
+                        placeholder={PLACEHOLDERS.email}
+                        type="email"
+                        disabled={isLoading}
+                        className={inputBaseClassName}
+                        onChange={() => {
+                          if (errors.email) setErrors((prev) => ({ ...prev, email: "" }));
+                        }}
+                      />
+                      {errors.email && (
+                        <p className="text-xs text-red-600 dark:text-red-400">{errors.email}</p>
+                      )}
+                    </div>
+                  </FormPageViewSingleInputLayout>
                 </CardContent>
                 <CardFooter className="flex flex-col space-y-4 px-8 pb-8 pt-2">
                   <Button
@@ -341,30 +361,30 @@ export default function ForgotPasswordPage() {
             {/* Step 2: OTP */}
             {step === "otp" && (
               <form onSubmit={handleVerifyOTP}>
-                <CardContent className="space-y-4 px-8">
-                  <div className="space-y-2">
-                    <Label htmlFor="otp" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
-                      {LABELS.otp}
-                    </Label>
-                    <Input
-                      id="otp"
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={6}
-                      placeholder={PLACEHOLDERS.otp}
-                      value={otp}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, "");
-                        setOtp(val);
-                        if (errors.otp) setErrors((p) => ({ ...p, otp: "" }));
-                      }}
-                      disabled={isLoading}
-                      className={`${inputBaseClassName} text-center text-2xl tracking-widest`}
-                    />
-                    {errors.otp && (
-                      <p className="text-xs text-red-600 dark:text-red-400">{errors.otp}</p>
-                    )}
-                  </div>
+                <CardContent className="px-8">
+                  <FormPageViewSingleInputLayout height="h-fit">
+                    <div className="space-y-2">
+                      <InputFieldControlled
+                        control={form.control}
+                        name="otp"
+                        label={LABELS.otp}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder={PLACEHOLDERS.otp}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "");
+                          form.setValue("otp", val, { shouldDirty: true, shouldValidate: true });
+                          if (errors.otp) setErrors((p) => ({ ...p, otp: "" }));
+                        }}
+                        disabled={isLoading}
+                        className={`${inputBaseClassName} text-center text-2xl tracking-widest`}
+                      />
+                      {errors.otp && (
+                        <p className="text-xs text-red-600 dark:text-red-400">{errors.otp}</p>
+                      )}
+                    </div>
+                  </FormPageViewSingleInputLayout>
                 </CardContent>
                 <CardFooter className="flex flex-col space-y-4 px-8 pb-8 pt-2">
                   <Button
@@ -378,7 +398,7 @@ export default function ForgotPasswordPage() {
                     type="button"
                     onClick={() => {
                       setStep("email");
-                      setOtp("");
+                      form.setValue("otp", "");
                       setErrors({});
                     }}
                     className="text-sm text-cyan-600 dark:text-cyan-500 hover:underline underline-offset-2 font-semibold"
@@ -392,81 +412,77 @@ export default function ForgotPasswordPage() {
             {/* Step 3: New Password */}
             {step === "reset" && (
               <form onSubmit={handleResetPassword}>
-                <CardContent className="space-y-4 px-8">
+                <CardContent className="px-8">
                   {errors.form && (
-                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950/30">
+                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 mb-3 dark:border-red-800 dark:bg-red-950/30">
                       <span className="mt-0.5 text-red-500">⚠</span>
                       <p className="text-sm font-medium text-red-700 dark:text-red-400">{errors.form}</p>
                     </div>
                   )}
-                  <div className="space-y-2">
-                    <Label htmlFor="newPassword" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
-                      {LABELS.newPassword}
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="newPassword"
+                  <FormPageViewSingleInputLayout height="h-fit">
+                    <div className="space-y-2">
+                      <InputFieldControlled
+                        control={form.control}
+                        name="newPassword"
+                        label={LABELS.newPassword}
                         type={showPassword ? "text" : "password"}
                         placeholder={PLACEHOLDERS.password}
-                        value={newPassword}
-                        onChange={(e) => {
-                          setNewPassword(e.target.value);
+                        disabled={isLoading}
+                        className={inputBaseClassName}
+                        onChange={() => {
                           if (errors.newPassword) setErrors((p) => ({ ...p, newPassword: "" }));
                         }}
-                        disabled={isLoading}
-                        className={inputBaseClassName}
+                        endAdornment={
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+                            disabled={isLoading}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-5 w-5" />
+                            ) : (
+                              <Eye className="h-5 w-5" />
+                            )}
+                          </button>
+                        }
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
-                        disabled={isLoading}
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-5 w-5" />
-                        ) : (
-                          <Eye className="h-5 w-5" />
-                        )}
-                      </button>
+                      {errors.newPassword && (
+                        <p className="text-xs text-red-600 dark:text-red-400">{errors.newPassword}</p>
+                      )}
                     </div>
-                    {errors.newPassword && (
-                      <p className="text-xs text-red-600 dark:text-red-400">{errors.newPassword}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
-                      {LABELS.confirmPassword}
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="confirmPassword"
+                    <div className="space-y-2">
+                      <InputFieldControlled
+                        control={form.control}
+                        name="confirmPassword"
+                        label={LABELS.confirmPassword}
                         type={showConfirmPassword ? "text" : "password"}
                         placeholder={PLACEHOLDERS.password}
-                        value={confirmPassword}
-                        onChange={(e) => {
-                          setConfirmPassword(e.target.value);
-                          if (errors.confirmPassword) setErrors((p) => ({ ...p, confirmPassword: "" }));
-                        }}
                         disabled={isLoading}
                         className={inputBaseClassName}
+                        onChange={() => {
+                          if (errors.confirmPassword) setErrors((p) => ({ ...p, confirmPassword: "" }));
+                        }}
+                        endAdornment={
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+                            disabled={isLoading}
+                          >
+                            {showConfirmPassword ? (
+                              <EyeOff className="h-5 w-5" />
+                            ) : (
+                              <Eye className="h-5 w-5" />
+                            )}
+                          </button>
+                        }
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
-                        disabled={isLoading}
-                      >
-                        {showConfirmPassword ? (
-                          <EyeOff className="h-5 w-5" />
-                        ) : (
-                          <Eye className="h-5 w-5" />
-                        )}
-                      </button>
+                      {errors.confirmPassword && (
+                        <p className="text-xs text-red-600 dark:text-red-400">{errors.confirmPassword}</p>
+                      )}
                     </div>
-                    {errors.confirmPassword && (
-                      <p className="text-xs text-red-600 dark:text-red-400">{errors.confirmPassword}</p>
-                    )}
-                  </div>
+                  </FormPageViewSingleInputLayout>
                 </CardContent>
                 <CardFooter className="flex flex-col space-y-4 px-8 pb-8 pt-2">
                   <Button
@@ -526,6 +542,7 @@ export default function ForgotPasswordPage() {
               </CardContent>
             )}
           </Card>
+          </Form>
         </div>
       </div>
     </div>

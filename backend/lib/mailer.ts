@@ -104,7 +104,7 @@ export async function sendOTPEmail(email: string, otp: string): Promise<void> {
 }
 
 export async function sendPasswordResetSuccessEmail(email: string, name: string): Promise<void> {
-  const displayName = name?.trim() || "User";
+  const displayName = name?.trim() || "Traveler";
   
   console.log(`[Mailer] Attempting to send password reset success email to: ${email}`);
 
@@ -113,33 +113,120 @@ export async function sendPasswordResetSuccessEmail(email: string, name: string)
     to: email,
     subject: "TripYojana - Password Reset Successful ✓",
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
-        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 28px 32px 20px; text-align: center;">
-          <div style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center;">
-            <span style="font-size: 32px;">✓</span>
-          </div>
-          <h1 style="color:#ffffff;font-size:24px;font-weight:bold;margin:0 0 10px;">Password Reset Successful</h1>
-        </div>
-        <div style="padding: 36px 32px;">
-          <p style="color: #374151; font-size: 15px; line-height: 1.7; margin: 0 0 20px;">
-            Hi ${displayName},
-          </p>
-          <p style="color: #374151; font-size: 15px; line-height: 1.7; margin: 0 0 20px;">
-            Your TripYojana password has been successfully reset. You can now log in with your new password.
-          </p>
-          <div style="background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 8px; padding: 16px 20px; margin: 0 0 24px;">
-            <p style="color: #065f46; font-size: 14px; margin: 0; line-height: 1.6;">
-              🔒 If you didn't make this change, please contact our support team immediately.
-            </p>
-          </div>
-          <div style="text-align: center; margin: 0 0 20px;">
-            <a href="${APP_URL}/auth" style="display: inline-block; background: #10b981; color: #ffffff; text-decoration: none; font-weight: bold; font-size: 15px; padding: 14px 36px; border-radius: 8px; letter-spacing: 0.5px;">Login to Your Account →</a>
-          </div>
-        </div>
-        <div style="background: #f9fafb; padding: 18px 32px; text-align: center; border-top: 1px solid #e5e7eb;">
-          <p style="color: #9ca3af; font-size: 12px; margin: 0;">© ${new Date().getFullYear()} TripYojana. Happy Travels! ✈️</p>
-        </div>
-      </div>
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f3f4f6; padding: 40px 20px;">
+          <tr>
+            <td align="center">
+              <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+                
+                <!-- Logo Header -->
+                <tr>
+                  <td style="background-color: #ffffff; padding: 30px 40px 20px; text-align: center; border-bottom: 3px solid #0891b2;">
+                    <h2 style="margin: 0; color: #0891b2; font-size: 32px; font-weight: 800; letter-spacing: -0.5px;">TripYojana</h2>
+                    <p style="margin: 8px 0 0; color: #64748b; font-size: 13px; font-weight: 500; letter-spacing: 1px; text-transform: uppercase;">Travel Planning Made Easy</p>
+                  </td>
+                </tr>
+
+                <!-- Hero Section with Animation -->
+                <tr>
+                  <td style="background: linear-gradient(180deg, #ffffff 0%, #f0fdff 100%); padding: 40px 40px 32px; text-align: center;">
+                    <h1 style="color: #111827; font-size: 32px; font-weight: 800; margin: 0 0 16px; letter-spacing: -0.5px; line-height: 1.2;">Your Next Adventure<br/>Awaits!</h1>
+                    <div style="margin: 32px 0;">
+                      <img src="https://cdn.templates.unlayer.com/assets/1698215331967-Stay-Tuned2.gif" alt="Travel Adventure" style="max-width: 100%; height: auto; display: block; margin: 0 auto; border-radius: 12px;" />
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Success Message -->
+                <tr>
+                  <td style="padding: 0 40px 40px;">
+                    <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 16px; padding: 28px 32px; text-align: center; margin-bottom: 32px;">
+                      <div style="width: 64px; height: 64px; background: rgba(255,255,255,0.25); border-radius: 50%; margin: 0 auto 16px; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M20 6L9 17L4 12" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                      </div>
+                      <h2 style="color: #ffffff; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.3px;">Password Reset Successful</h2>
+                    </div>
+
+                    <p style="color: #111827; font-size: 16px; line-height: 1.7; margin: 0 0 12px; text-align: center;">
+                      Hi <strong>${displayName}</strong>,
+                    </p>
+                    <p style="color: #4b5563; font-size: 15px; line-height: 1.8; margin: 0 0 12px; text-align: center;">
+                      Your TripYojana password has been successfully reset. You can now log in with your new password.
+                    </p>
+                    <p style="color: #6b7280; font-size: 14px; line-height: 1.7; margin: 0 0 32px; text-align: center;">
+                      Get ready to plan amazing adventures and explore new destinations!
+                    </p>
+
+                    <!-- Security Warning -->
+                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 4px solid #f59e0b; border-radius: 12px; padding: 20px 24px; margin: 0 0 32px;">
+                      <p style="color: #92400e; font-size: 13px; margin: 0; line-height: 1.7; text-align: center;">
+                        <strong style="font-size: 20px; vertical-align: middle;">🔒</strong> 
+                        <strong>Security Notice:</strong> If you didn't make this change, please contact our support team immediately.
+                      </p>
+                    </div>
+
+                    <!-- CTA Button -->
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" style="padding: 0 0 24px;">
+                          <a href="${APP_URL}/auth" style="display: inline-block; background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%); color: #ffffff; text-decoration: none; font-weight: 700; font-size: 16px; padding: 18px 48px; border-radius: 12px; letter-spacing: 0.3px; box-shadow: 0 6px 20px rgba(8, 145, 178, 0.4); text-transform: uppercase;">Login to Your Account →</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                  <td style="background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); padding: 32px 40px; text-align: center;">
+                    <!-- Social Media Icons -->
+                    <div style="margin-bottom: 20px;">
+                      <a href="#" style="display: inline-block; width: 40px; height: 40px; background: #1877f2; border-radius: 50%; margin: 0 6px; text-decoration: none; line-height: 40px;">
+                        <span style="color: #ffffff; font-size: 18px; font-weight: bold;">f</span>
+                      </a>
+                      <a href="#" style="display: inline-block; width: 40px; height: 40px; background: #1da1f2; border-radius: 50%; margin: 0 6px; text-decoration: none; line-height: 40px;">
+                        <span style="color: #ffffff; font-size: 18px; font-weight: bold;">𝕏</span>
+                      </a>
+                      <a href="#" style="display: inline-block; width: 40px; height: 40px; background: #0077b5; border-radius: 50%; margin: 0 6px; text-decoration: none; line-height: 40px;">
+                        <span style="color: #ffffff; font-size: 18px; font-weight: bold;">in</span>
+                      </a>
+                      <a href="#" style="display: inline-block; width: 40px; height: 40px; background: #e4405f; border-radius: 50%; margin: 0 6px; text-decoration: none; line-height: 40px;">
+                        <span style="color: #ffffff; font-size: 18px; font-weight: bold;">📷</span>
+                      </a>
+                    </div>
+
+                    <!-- Footer Links -->
+                    <div style="margin-bottom: 16px;">
+                      <a href="${APP_URL}/unsubscribe" style="color: #e9d5ff; text-decoration: none; font-size: 12px; margin: 0 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Unsubscribe</a>
+                      <span style="color: #e9d5ff; font-size: 12px;">|</span>
+                      <a href="${APP_URL}/privacy" style="color: #e9d5ff; text-decoration: none; font-size: 12px; margin: 0 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Privacy Policy</a>
+                      <span style="color: #e9d5ff; font-size: 12px;">|</span>
+                      <a href="${APP_URL}" style="color: #e9d5ff; text-decoration: none; font-size: 12px; margin: 0 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Website</a>
+                    </div>
+
+                    <p style="color: #f3e8ff; font-size: 13px; margin: 0 0 4px; line-height: 1.6;">
+                      Need help? Contact us anytime at support@tripyojana.com
+                    </p>
+                    <p style="color: #e9d5ff; font-size: 12px; margin: 0;">
+                      © ${new Date().getFullYear()} TripYojana. Happy Travels! ✈️
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `,
   });
 
