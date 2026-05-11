@@ -73,25 +73,54 @@ export async function sendOTPEmail(email: string, otp: string): Promise<void> {
   const { data, error } = await getResend().emails.send({
     from: FROM_ADDRESS,
     to: email,
-    subject: "TripYojana - Password Reset OTP",
+    subject: "TripYojana - Your Password Reset Code",
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
-        <div style="background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%); padding: 28px 32px 20px; text-align: center;">
-          <h1 style="color:#ffffff;font-size:24px;font-weight:bold;margin:0 0 10px;">TripYojana</h1>
-          <p style="color: #cffafe; font-size: 14px; margin: 0;">Travel Planning Made Easy</p>
-        </div>
-        <div style="padding: 36px 32px;">
-          <h2 style="color: #0891b2; margin: 0 0 10px; font-size: 20px;">Password Reset Request</h2>
-          <p style="color: #374151; margin-bottom: 24px; font-size: 15px; line-height: 1.6;">Use the OTP below to reset your TripYojana password. It expires in <strong>10 minutes</strong>.</p>
-          <div style="background: #f0fdff; border: 2px solid #0891b2; border-radius: 10px; text-align: center; padding: 28px 16px; margin-bottom: 24px;">
-            <span style="font-size: 44px; font-weight: bold; letter-spacing: 14px; color: #0891b2;">${otp}</span>
-          </div>
-          <p style="color: #6b7280; font-size: 13px; line-height: 1.6;">If you did not request this, please ignore this email. Your password will remain unchanged.</p>
-        </div>
-        <div style="background: #f9fafb; padding: 18px 32px; text-align: center; border-top: 1px solid #e5e7eb;">
-          <p style="color: #9ca3af; font-size: 12px; margin: 0;">© ${new Date().getFullYear()} TripYojana. Happy Travels! ✈️</p>
-        </div>
-      </div>
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      </head>
+      <body style="margin: 0; padding: 24px; background: #eef4ff; font-family: Arial, sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center">
+              <table width="580" cellpadding="0" cellspacing="0" border="0" style="max-width: 580px; background: #ffffff; border-radius: 18px; overflow: hidden; box-shadow: 0 12px 32px rgba(2, 6, 23, 0.14);">
+                <tr>
+                  <td style="background: linear-gradient(135deg, #0ea5e9 0%, #0f766e 100%); padding: 28px 32px; text-align: center;">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 28px; letter-spacing: 0.3px;">TripYojana</h1>
+                    <p style="margin: 8px 0 0; color: #d1fae5; font-size: 13px;">Password reset verification</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 34px 32px 20px; text-align: center;">
+                    <p style="margin: 0 0 10px; color: #0f172a; font-size: 22px; font-weight: 700;">Use this OTP to reset your password</p>
+                    <p style="margin: 0 0 24px; color: #475569; font-size: 14px; line-height: 1.6;">This code is valid for 10 minutes. Please do not share it with anyone.</p>
+
+                    <div style="display: inline-block; background: #ecfeff; border: 2px dashed #0891b2; border-radius: 12px; padding: 20px 24px; margin: 0 0 20px;">
+                      <span style="font-size: 40px; letter-spacing: 12px; font-weight: 800; color: #0e7490;">${otp}</span>
+                    </div>
+
+                    <div style="background: #f8fafc; border-radius: 10px; padding: 14px 16px; margin: 0 auto 20px; max-width: 430px; text-align: left;">
+                      <p style="margin: 0; color: #334155; font-size: 13px; line-height: 1.6;">
+                        If you did not request a password reset, you can safely ignore this email.
+                      </p>
+                    </div>
+
+                    <p style="margin: 0; color: #94a3b8; font-size: 11px;">Template version: OTP-V2</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 18px 24px; border-top: 1px solid #e2e8f0; text-align: center; background: #f8fafc;">
+                    <p style="margin: 0; color: #94a3b8; font-size: 12px;">© ${new Date().getFullYear()} TripYojana</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `,
   });
 

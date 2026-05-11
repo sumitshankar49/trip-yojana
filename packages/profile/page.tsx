@@ -23,7 +23,7 @@ import { FormPageViewTwoInputLayout } from "@/packages/components/shared/form/Fo
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { data: session, update } = useSession();
+  const { data: session, status, update } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [profilePhoto, setProfilePhoto] = useState("");
@@ -44,6 +44,14 @@ export default function ProfilePage() {
 
   // Fetch profile data on mount
   useEffect(() => {
+    if (status === "loading") return;
+
+    if (status === "unauthenticated") {
+      setIsFetching(false);
+      router.replace("/auth?mode=login");
+      return;
+    }
+
     const fetchProfile = async () => {
       try {
         const response = await fetch("/api/profile", {
@@ -77,10 +85,8 @@ export default function ProfilePage() {
       }
     };
 
-    if (session) {
-      fetchProfile();
-    }
-  }, [session, setValue, router]);
+    fetchProfile();
+  }, [status, router, setValue]);
 
   // Update profile photo preview when URL changes
   useEffect(() => {

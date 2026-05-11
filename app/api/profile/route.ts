@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { auth } from "@/backend/lib/auth";
 import prisma from "@/backend/config/prisma";
 
 // GET - Fetch user profile
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    // Get user from token
-    const token = await getToken({ req, secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET });
+    // Resolve session via NextAuth server helper to avoid cookie decode edge cases.
+    const session = await auth();
+    const email = session?.user?.email;
     
-    if (!token || !token.email) {
+    if (!email) {
       return NextResponse.json(
         {
           message: "Session expired. Please sign in again.",
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: token.email as string },
+      where: { email },
       select: {
         id: true,
         email: true,
@@ -60,10 +61,10 @@ export async function GET(req: NextRequest) {
 // PUT - Update user profile
 export async function PUT(req: NextRequest) {
   try {
-    // Get user from token
-    const token = await getToken({ req, secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET });
+    const session = await auth();
+    const email = session?.user?.email;
     
-    if (!token || !token.email) {
+    if (!email) {
       return NextResponse.json(
         {
           message: "Session expired. Please sign in again.",
@@ -93,7 +94,7 @@ export async function PUT(req: NextRequest) {
 
     // Update user profile
     const updatedUser = await prisma.user.update({
-      where: { email: token.email as string },
+      where: { email },
       data: {
         name: name.trim(),
         phone: phone.trim(),
