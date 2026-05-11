@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/packages/components/ui/card";
 import { Input } from "@/packages/components/ui/input";
 import { Label } from "@/packages/components/ui/label";
@@ -21,6 +22,7 @@ import { FormPageViewSingleInputLayout } from "@/packages/components/shared/form
 import { FormPageViewTwoInputLayout } from "@/packages/components/shared/form/FormPageViewTwoInputLayout";
 
 export default function ProfilePage() {
+  const router = useRouter();
   const { data: session, update } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
@@ -44,7 +46,16 @@ export default function ProfilePage() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await fetch("/api/profile");
+        const response = await fetch("/api/profile", {
+          method: "GET",
+          credentials: "include",
+        });
+
+        if (response.status === 401) {
+          toast.error("Your session has expired. Please sign in again.");
+          router.replace("/auth?mode=login");
+          return;
+        }
 
         if (!response.ok) {
           throw new Error("Failed to fetch profile");
@@ -69,7 +80,7 @@ export default function ProfilePage() {
     if (session) {
       fetchProfile();
     }
-  }, [session, setValue]);
+  }, [session, setValue, router]);
 
   // Update profile photo preview when URL changes
   useEffect(() => {
@@ -87,6 +98,7 @@ export default function ProfilePage() {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify(data),
       });
 
@@ -176,7 +188,7 @@ export default function ProfilePage() {
             <Form {...form}>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               {/* Name + Phone side by side */}
-              <FormPageViewTwoInputLayout>
+              <FormPageViewTwoInputLayout height="h-fit">
                 <InputFieldControlled
                   control={control}
                   name="name"
@@ -200,7 +212,7 @@ export default function ProfilePage() {
               </FormPageViewTwoInputLayout>
 
               {/* Email (read-only) + City side by side */}
-              <FormPageViewTwoInputLayout>
+              <FormPageViewTwoInputLayout height="h-fit">
                 <div className="space-y-2">
                   <Label htmlFor="email" className="flex items-center gap-2">
                     <User className="h-4 w-4" />

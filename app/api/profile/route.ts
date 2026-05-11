@@ -10,7 +10,10 @@ export async function GET(req: NextRequest) {
     
     if (!token || !token.email) {
       return NextResponse.json(
-        { message: "Unauthorized" },
+        {
+          message: "Session expired. Please sign in again.",
+          code: "UNAUTHORIZED",
+        },
         { status: 401 }
       );
     }
@@ -62,7 +65,10 @@ export async function PUT(req: NextRequest) {
     
     if (!token || !token.email) {
       return NextResponse.json(
-        { message: "Unauthorized" },
+        {
+          message: "Session expired. Please sign in again.",
+          code: "UNAUTHORIZED",
+        },
         { status: 401 }
       );
     }
