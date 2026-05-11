@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import fs from "node:fs";
+import path from "node:path";
 import foodsByState from "@/packages/constants/famous-foods-by-state.json";
 
 export const runtime = "nodejs";
@@ -10,6 +12,13 @@ type DayPlan = {
   day: number;
   focus: string;
   places: string[];
+};
+
+type FoodGuideItem = {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  description: string;
 };
 
 type DiscoverItem = {
@@ -37,7 +46,7 @@ type DestinationGuideResponse = {
   heroImageUrl: string | null;
   places: DiscoverItem[];
   shopping: DiscoverItem[];
-  famousFoods: string[];
+  famousFoods: FoodGuideItem[];
   tips: string[];
   famousPlaces: string[];
   shoppingHighlights: string[];
@@ -57,6 +66,10 @@ const WIKIPEDIA_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary
 const INDIA_POST_URL = "https://api.postalpincode.in/pincode";
 
 const GEOAPIFY_KEY = process.env.GEOAPIFY_API_KEY || "";
+const FOOD_IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "avif"] as const;
+const FOOD_IMAGE_FALLBACK = "/foods/fallback-food.jpg";
+const foodImageLookupCache = new Map<string, string>();
+const foodImageDirectoryIndexCache = new Map<string, Map<string, string>>();
 
 const normalizeText = (value: string) => value.trim().replace(/\s+/g, " ");
 
@@ -68,6 +81,88 @@ function slugifyName(value: string): string {
     .replace(/[^a-z0-9\s-]/g, "")
     .trim()
     .replace(/\s+/g, "-");
+}
+
+function normalizeAssetKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function buildDirectoryImageIndex(absoluteDir: string, webPrefix: string): Map<string, string> {
+  const cached = foodImageDirectoryIndexCache.get(absoluteDir);
+  if (cached) {
+    return cached;
+  }
+
+  const index = new Map<string, string>();
+  if (!fs.existsSync(absoluteDir)) {
+    foodImageDirectoryIndexCache.set(absoluteDir, index);
+    return index;
+  }
+
+  for (const entry of fs.readdirSync(absoluteDir, { withFileTypes: true })) {
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const ext = path.extname(entry.name).replace(".", "").toLowerCase();
+    if (!FOOD_IMAGE_EXTENSIONS.includes(ext as (typeof FOOD_IMAGE_EXTENSIONS)[number])) {
+      continue;
+    }
+
+    const baseName = path.basename(entry.name, path.extname(entry.name));
+    const key = normalizeAssetKey(baseName);
+    if (!key || index.has(key)) {
+      continue;
+    }
+
+    index.set(key, `${webPrefix}/${entry.name}`);
+  }
+
+  foodImageDirectoryIndexCache.set(absoluteDir, index);
+  return index;
+}
+
+function findImageInDirectory(absoluteDir: string, webPrefix: string, slug: string, normalizedFoodKey: string): string | null {
+  for (const ext of FOOD_IMAGE_EXTENSIONS) {
+    const filename = `${slug}.${ext}`;
+    const absolutePath = path.join(absoluteDir, filename);
+    if (fs.existsSync(absolutePath)) {
+      return `${webPrefix}/${filename}`;
+    }
+  }
+
+  const index = buildDirectoryImageIndex(absoluteDir, webPrefix);
+  return index.get(normalizedFoodKey) || null;
+}
+
+function getFoodImagePath(foodName: string, state: string): string {
+  const slug = slugifyName(foodName);
+  const stateSlug = slugifyName(normalizeStateName(state));
+  const normalizedFoodKey = normalizeAssetKey(foodName);
+  const cacheKey = `${stateSlug}:${slug}`;
+  const cached = foodImageLookupCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const foodsRootDir = path.join(process.cwd(), "public", "foods");
+  if (stateSlug && stateSlug !== "unknown-state") {
+    const stateDir = path.join(foodsRootDir, stateSlug);
+    const stateImage = findImageInDirectory(stateDir, `/foods/${stateSlug}`, slug, normalizedFoodKey);
+    if (stateImage) {
+      foodImageLookupCache.set(cacheKey, stateImage);
+      return stateImage;
+    }
+  }
+
+  const rootImage = findImageInDirectory(foodsRootDir, "/foods", slug, normalizedFoodKey);
+  if (rootImage) {
+    foodImageLookupCache.set(cacheKey, rootImage);
+    return rootImage;
+  }
+
+  foodImageLookupCache.set(cacheKey, FOOD_IMAGE_FALLBACK);
+  return FOOD_IMAGE_FALLBACK;
 }
 
 function toRad(value: number): number {
@@ -1148,6 +1243,34 @@ function getFamousFoodsByState(state: string): string[] {
   return contains ? contains[1].slice(0, 8) : [];
 }
 
+function getFoodDescription(foodName: string, state: string): string {
+  const lower = foodName.toLowerCase();
+
+  if (/biryani/.test(lower)) {
+    return `A fragrant rice specialty from ${state}, layered with bold spices.`;
+  }
+  if (/curry|mas|ghanta|thongba/.test(lower)) {
+    return `A savory ${state} curry known for regional spice blends and depth.`;
+  }
+  if (/jalebi|poda|sweet|meetha|kheer|khaja|ghevar|rosogolla|poli|pak/.test(lower)) {
+    return `A beloved sweet from ${state}, often served during festive moments.`;
+  }
+  if (/dosa|idli|paratha|roti|kulcha|bhature|appam|parotta/.test(lower)) {
+    return `A classic ${state} staple that travelers love for comfort and flavor.`;
+  }
+
+  return `A popular regional specialty from ${state}, loved by locals and travelers.`;
+}
+
+function buildFoodGuideItems(state: string): FoodGuideItem[] {
+  return getFamousFoodsByState(state).map((food) => ({
+    id: `food-${slugifyName(food)}`,
+    name: food,
+    imageUrl: getFoodImagePath(food, state),
+    description: getFoodDescription(food, state),
+  }));
+}
+
 function dedupeByName(items: DiscoverItem[]): DiscoverItem[] {
   const seen = new Set<string>();
   const unique: DiscoverItem[] = [];
@@ -1306,7 +1429,7 @@ export async function GET(req: NextRequest) {
       imageUrl: item.imageUrl || wikiImageMap[item.name.toLowerCase()] || null,
     }));
 
-    const famousFoods = getFamousFoodsByState(state);
+    const famousFoods = buildFoodGuideItems(state);
 
     const famousPlaceNames = places.map((item) => item.name).slice(0, 8);
     const shoppingNames = shopping.map((item) => item.name).slice(0, 8);

@@ -19,7 +19,7 @@ import { TRIP_LABELS, TRIP_MESSAGES, TRIP_ERRORS } from "./constants";
 import { InputFieldControlled } from "@/packages/components/shared/form/InputFieldControlled";
 import { Form } from "@/packages/components/ui/form";
 import { FormPageViewTwoInputLayout } from "@/packages/components/shared/form/FormPageViewTwoInputLayout";
-import { Info, MapPin, Navigation } from "lucide-react";
+import { Heart, Info, MapPin, Navigation } from "lucide-react";
 import { fetchPincodeLocation } from "@/packages/lib/pincode";
 
 type Step = 1 | 2 | 3;
@@ -37,6 +37,13 @@ type GuideItem = {
   source: "geoapify" | "overpass" | "wikipedia";
 };
 
+type FoodGuideItem = {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  description: string;
+};
+
 type DestinationGuide = {
   destination: {
     city: string;
@@ -51,7 +58,7 @@ type DestinationGuide = {
   shopping: GuideItem[];
   tips: string[];
   famousPlaces: string[];
-  famousFoods: string[];
+  famousFoods: FoodGuideItem[];
   popularFoodSpots: string[];
   shoppingHighlights: string[];
 };
@@ -80,6 +87,8 @@ export default function CreateTripPage() {
   const [guideError, setGuideError] = useState("");
   const [activeGuideTab, setActiveGuideTab] = useState<"places" | "food" | "shopping">("places");
   const [addedGuidePlaces, setAddedGuidePlaces] = useState<string[]>([]);
+  const [savedFoods, setSavedFoods] = useState<string[]>([]);
+  const [failedFoodImages, setFailedFoodImages] = useState<string[]>([]);
   const [dateErrors, setDateErrors] = useState<{ startDate?: string; endDate?: string; travelType?: string }>({});
   
   // React Hook Form for source and destination
@@ -143,11 +152,32 @@ export default function CreateTripPage() {
       : 0;
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem("trip-yojana:saved-foods");
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        const values = parsed.filter((item): item is string => typeof item === "string");
+        setSavedFoods(values);
+      }
+    } catch {
+      // Ignore invalid local storage data.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("trip-yojana:saved-foods", JSON.stringify(savedFoods));
+  }, [savedFoods]);
+
+  useEffect(() => {
     const trimmedDestination = destination.trim();
     const trimmedDestinationPincode = destinationPincode.trim();
     const destinationQuery = trimmedDestination || trimmedDestinationPincode;
     setAddedGuidePlaces([]);
     setActiveGuideTab("places");
+    setFailedFoodImages([]);
 
     if (!destinationQuery || (!isValidPincode(trimmedDestinationPincode) && destinationQuery.length < 3)) {
       setDestinationGuide(null);
@@ -216,6 +246,30 @@ export default function CreateTripPage() {
 
       toast.success(`${item.name} added to itinerary list.`);
       return [...previous, item.name];
+    });
+  };
+
+  const addFoodToItinerary = (food: FoodGuideItem) => {
+    setAddedGuidePlaces((previous) => {
+      if (previous.includes(food.name)) {
+        toast.info(`${food.name} is already added.`);
+        return previous;
+      }
+
+      toast.success(`${food.name} added to itinerary list.`);
+      return [...previous, food.name];
+    });
+  };
+
+  const toggleSavedFood = (foodName: string) => {
+    setSavedFoods((previous) => {
+      if (previous.includes(foodName)) {
+        toast.info(`${foodName} removed from saved foods.`);
+        return previous.filter((name) => name !== foodName);
+      }
+
+      toast.success(`${foodName} saved to favorites.`);
+      return [...previous, foodName];
     });
   };
 
@@ -798,13 +852,59 @@ export default function CreateTripPage() {
 
                           <TabsContent value="food" className="mt-3">
                             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                              {destinationGuide.famousFoods.slice(0, 9).map((food) => (
-                                <div key={food} className="rounded-xl border border-emerald-200/70 bg-white/90 p-3 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md dark:border-emerald-900/40 dark:bg-zinc-900/70">
-                                  <div className="mb-3 flex h-28 items-center justify-center rounded-lg bg-linear-to-br from-emerald-100 to-lime-100 text-xs font-semibold text-emerald-700 dark:from-emerald-950/40 dark:to-lime-950/30 dark:text-emerald-300">
-                                    Signature Dish
+                              {destinationGuide.famousFoods.slice(0, 9).map((food, index) => (
+                                <div
+                                  key={food.id}
+                                  className="group rounded-2xl border border-emerald-200/70 bg-white/90 p-3 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:border-emerald-900/40 dark:bg-zinc-900/70"
+                                  style={{ animationDelay: `${index * 50}ms` }}
+                                >
+                                  <div className="mb-3 aspect-16/10 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950/40">
+                                    {food.imageUrl && !failedFoodImages.includes(food.id) ? (
+                                      <Image
+                                        src={food.imageUrl}
+                                        alt={food.name}
+                                        width={480}
+                                        height={256}
+                                        className="h-full w-full object-contain p-2 transition-transform duration-500 group-hover:scale-[1.02]"
+                                        onError={() => {
+                                          setFailedFoodImages((previous) =>
+                                            previous.includes(food.id) ? previous : [...previous, food.id]
+                                          );
+                                        }}
+                                      />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-emerald-100 to-lime-100 text-xs font-semibold text-emerald-700 dark:from-emerald-950/40 dark:to-lime-950/30 dark:text-emerald-300">
+                                        Signature Dish
+                                      </div>
+                                    )}
                                   </div>
-                                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{food}</p>
-                                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">State-based famous food</p>
+                                  <p className="line-clamp-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{food.name}</p>
+                                  <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">{food.description}</p>
+                                  <div className="mt-3 flex gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 flex-1 text-xs"
+                                      onClick={() => toggleSavedFood(food.name)}
+                                    >
+                                      <Heart
+                                        className={cn(
+                                          "mr-1 h-3.5 w-3.5",
+                                          savedFoods.includes(food.name) ? "fill-rose-500 text-rose-500" : ""
+                                        )}
+                                      />
+                                      {savedFoods.includes(food.name) ? "Saved" : "Save"}
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-8 flex-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+                                      onClick={() => addFoodToItinerary(food)}
+                                    >
+                                      {addedGuidePlaces.includes(food.name) ? "Added" : "Add to Itinerary"}
+                                    </Button>
+                                  </div>
                                 </div>
                               ))}
                               {destinationGuide.famousFoods.length === 0 && (
