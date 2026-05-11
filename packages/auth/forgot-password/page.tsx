@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/packages/lib/toast";
 import { Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/packages/components/ui/card";
 import { Button } from "@/packages/components/ui/button";

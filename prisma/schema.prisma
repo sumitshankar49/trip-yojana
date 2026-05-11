@@ -20,6 +20,10 @@ model User {
   updatedAt      DateTime       @updatedAt
   notifications  Notification[]
   trips          Trip[]
+  ownedExpenseGroups ExpenseGroup[]      @relation("ExpenseGroupOwner")
+  expenseGroupMembers ExpenseGroupMember[]
+  createdGroupExpenses ExpenseGroupExpense[] @relation("ExpenseCreatedBy")
+  settledTransactions SettlementTransaction[] @relation("SettlementMarkedBy")
 
   @@map("users")
 }
@@ -29,7 +33,13 @@ model Trip {
   userId      String
   title       String
   source      String?
+  sourcePincode String?
+  sourceState String?
+  sourceCountry String?
   destination String
+  destinationPincode String?
+  destinationState String?
+  destinationCountry String?
   startDate   DateTime
   endDate     DateTime
   budget      Float
@@ -41,10 +51,120 @@ model Trip {
   expenses    Expense[]
   itineraries Itinerary[]
   tripPlaces  TripPlace[]
+  expenseGroups ExpenseGroup[]
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("trips")
+}
+
+model ExpenseGroup {
+  id          String               @id @default(cuid())
+  tripId      String
+  ownerId     String
+  name        String
+  description String?
+  currency    String               @default("INR")
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  owner       User                 @relation("ExpenseGroupOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  trip        Trip                 @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  members     ExpenseGroupMember[]
+  expenses    ExpenseGroupExpense[]
+  settlements SettlementTransaction[]
+
+  @@unique([tripId, name])
+  @@index([tripId])
+  @@index([ownerId])
+  @@map("expense_groups")
+}
+
+model ExpenseGroupMember {
+  id          String               @id @default(cuid())
+  groupId     String
+  userId      String?
+  email       String
+  name        String
+  role        String               @default("member")
+  status      String               @default("pending")
+  invitedById String?
+  joinedAt    DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  group       ExpenseGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user        User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  shares      ExpenseGroupShare[]
+  paidExpenses ExpenseGroupExpense[] @relation("ExpensePaidBy")
+  outgoingSettlements SettlementTransaction[] @relation("SettlementFrom")
+  incomingSettlements SettlementTransaction[] @relation("SettlementTo")
+
+  @@unique([groupId, email])
+  @@index([groupId])
+  @@index([userId])
+  @@map("expense_group_members")
+}
+
+model ExpenseGroupExpense {
+  id             String              @id @default(cuid())
+  groupId        String
+  createdById    String
+  paidByMemberId String
+  title          String
+  amount         Float
+  category       String
+  notes          String?
+  splitMethod    String              @default("equal")
+  paidAt         DateTime            @default(now())
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  group          ExpenseGroup        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy      User                @relation("ExpenseCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  paidByMember   ExpenseGroupMember  @relation("ExpensePaidBy", fields: [paidByMemberId], references: [id], onDelete: Restrict)
+  shares         ExpenseGroupShare[]
+
+  @@index([groupId])
+  @@index([paidByMemberId])
+  @@index([createdById])
+  @@map("expense_group_expenses")
+}
+
+model ExpenseGroupShare {
+  id         String              @id @default(cuid())
+  expenseId  String
+  memberId   String
+  amount     Float
+  isSettled  Boolean             @default(false)
+  settledAt  DateTime?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  expense    ExpenseGroupExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  member     ExpenseGroupMember  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, memberId])
+  @@index([memberId])
+  @@map("expense_group_shares")
+}
+
+model SettlementTransaction {
+  id             String             @id @default(cuid())
+  groupId        String
+  fromMemberId   String
+  toMemberId     String
+  amount         Float
+  status         String             @default("completed")
+  settledById    String?
+  settledAt      DateTime           @default(now())
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  group          ExpenseGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  fromMember     ExpenseGroupMember @relation("SettlementFrom", fields: [fromMemberId], references: [id], onDelete: Restrict)
+  toMember       ExpenseGroupMember @relation("SettlementTo", fields: [toMemberId], references: [id], onDelete: Restrict)
+  settledBy      User?              @relation("SettlementMarkedBy", fields: [settledById], references: [id], onDelete: SetNull)
+
+  @@index([groupId])
+  @@index([fromMemberId])
+  @@index([toMemberId])
+  @@map("settlement_transactions")
 }
 
 model TripPlace {

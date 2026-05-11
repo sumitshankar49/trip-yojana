@@ -15,6 +15,36 @@ const CATEGORY_THEME: Record<Place["category"], { color: string; emoji: string }
   activity: { color: "#059669", emoji: "🎯" },
 };
 
+const toValidTuple = (lat: unknown, lng: unknown): [number, number] | null => {
+  const parsedLat = Number(lat);
+  const parsedLng = Number(lng);
+  if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
+    return null;
+  }
+
+  if (parsedLat < -90 || parsedLat > 90 || parsedLng < -180 || parsedLng > 180) {
+    return null;
+  }
+  return [parsedLat, parsedLng];
+};
+
+type NormalizedPlace = Place & { position: [number, number] };
+
+const normalizePlaces = (places: Place[]): NormalizedPlace[] =>
+  places.flatMap((place) => {
+    const position = toValidTuple(place.lat, place.lng);
+    if (!position) {
+      return [];
+    }
+
+    return [{
+      ...place,
+      lat: position[0],
+      lng: position[1],
+      position,
+    }];
+  });
+
 function haversineDistanceKm(start: [number, number], end: [number, number]) {
   const toRad = (value: number) => (value * Math.PI) / 180;
   const earthRadiusKm = 6371;
@@ -83,24 +113,44 @@ const createNumberIcon = (number: number, category: Place["category"]) => {
   });
 };
 
-function FitBounds({ places, skipFit }: { places: Place[]; skipFit?: boolean }) {
+function FitBounds({ places, skipFit }: { places: NormalizedPlace[]; skipFit?: boolean }) {
   const map = useMap();
 
   useEffect(() => {
     if (!places.length || !map || skipFit) return;
 
-    const bounds = places.map((p) => [p.lat, p.lng] as [number, number]);
-    map.flyToBounds(bounds, {
-      padding: MAP_DEFAULTS.MAP_PADDING,
-      duration: 0.9,
-      easeLinearity: 0.35,
-    });
+    if (places.length === 1) {
+      try {
+        map.flyTo(places[0].position, 12, {
+          duration: 0.9,
+          easeLinearity: 0.35,
+        });
+      } catch {
+        // Ignore malformed map targets to avoid crashing the page.
+      }
+      return;
+    }
+
+    const bounds = L.latLngBounds(places.map((place) => place.position));
+    if (!bounds.isValid()) {
+      return;
+    }
+
+    try {
+      map.flyToBounds(bounds, {
+        padding: MAP_DEFAULTS.MAP_PADDING,
+        duration: 0.9,
+        easeLinearity: 0.35,
+      });
+    } catch {
+      // Ignore malformed map bounds to avoid crashing the page.
+    }
   }, [places, map, skipFit]);
 
   return null;
 }
 
-function ZoomToPlace({ places, focusPlace }: { places: Place[]; focusPlace?: string | null }) {
+function ZoomToPlace({ places, focusPlace }: { places: NormalizedPlace[]; focusPlace?: string | null }) {
   const map = useMap();
 
   useEffect(() => {
@@ -112,10 +162,14 @@ function ZoomToPlace({ places, focusPlace }: { places: Place[]; focusPlace?: str
     );
 
     if (matchedPlace) {
-      map.flyTo([matchedPlace.lat, matchedPlace.lng], 12, {
-        duration: 1.5,
-        easeLinearity: 0.5,
-      });
+      try {
+        map.flyTo(matchedPlace.position, 12, {
+          duration: 1.5,
+          easeLinearity: 0.5,
+        });
+      } catch {
+        return;
+      }
 
       setTimeout(() => {
         map.eachLayer((layer) => {
@@ -133,7 +187,7 @@ function ZoomToPlace({ places, focusPlace }: { places: Place[]; focusPlace?: str
   return null;
 }
 
-const getCenter = (places: Place[]): [number, number] => {
+const getCenter = (places: NormalizedPlace[]): [number, number] => {
   if (!places.length) return MAP_DEFAULTS.WORLD_CENTER;
 
   const { minLat, maxLat, minLng, maxLng } = MAP_DEFAULTS.INDIA_BOUNDS;
@@ -145,11 +199,12 @@ const getCenter = (places: Place[]): [number, number] => {
 };
 
 export function MapComponent({ places, focusPlace }: MapComponentProps) {
-  const positions = places.map((p) => [p.lat, p.lng] as [number, number]);
-  const center = getCenter(places);
-  const zoom = places.length ? MAP_DEFAULTS.PLACES_ZOOM : MAP_DEFAULTS.DEFAULT_ZOOM;
+  const normalizedPlaces = normalizePlaces(places);
+  const positions = normalizedPlaces.map((p) => p.position);
+  const center = getCenter(normalizedPlaces);
+  const zoom = normalizedPlaces.length ? MAP_DEFAULTS.PLACES_ZOOM : MAP_DEFAULTS.DEFAULT_ZOOM;
 
-  const segmentDistances = places
+  const segmentDistances = normalizedPlaces
     .reduce<{
       items: Array<{ fromPreviousKm: number; cumulativeKm: number }>;
       cumulativeKm: number;
@@ -161,7 +216,7 @@ export function MapComponent({ places, focusPlace }: MapComponentProps) {
         };
       }
 
-      const previous = places[index - 1];
+      const previous = normalizedPlaces[index - 1];
       const fromPreviousKm = haversineDistanceKm(
         [previous.lat, previous.lng],
         [place.lat, place.lng]
@@ -192,8 +247,8 @@ export function MapComponent({ places, focusPlace }: MapComponentProps) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         />
 
-        <FitBounds places={places} skipFit={!!focusPlace} />
-        <ZoomToPlace places={places} focusPlace={focusPlace} />
+        <FitBounds places={normalizedPlaces} skipFit={!!focusPlace} />
+        <ZoomToPlace places={normalizedPlaces} focusPlace={focusPlace} />
 
       {/* Polyline connecting places */}
       {positions.length > 1 && (
@@ -204,10 +259,10 @@ export function MapComponent({ places, focusPlace }: MapComponentProps) {
       )}
 
       {/* Markers */}
-      {places.map((place, index) => (
+      {normalizedPlaces.map((place, index) => (
         <Marker
           key={place.id}
-          position={[place.lat, place.lng]}
+          position={place.position}
           icon={createNumberIcon(index + 1, place.category)}
           riseOnHover
         >

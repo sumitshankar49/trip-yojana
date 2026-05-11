@@ -4,17 +4,16 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { toast } from "sonner";
+import { toast } from "@/packages/lib/toast";
 import { Eye, EyeOff } from "lucide-react";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/packages/components/ui/card";
-import { Button } from "@/packages/components/ui/button";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/packages/components/ui/card";import { Button } from "@/packages/components/ui/button";
 import { Form } from "@/packages/components/ui/form";
 import { AuthMode, FormErrors } from "./types";
 import { AUTH_LABELS, AUTH_MESSAGES } from "./constants";
 import { validateName, validateEmail, validatePassword, validateConfirmPassword } from "./validations";
 import { FormPageViewSingleInputLayout } from "@/packages/components/shared/form/FormPageViewSingleInputLayout";
 import { InputFieldControlled } from "@/packages/components/shared/form/InputFieldControlled";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 type AuthFormValues = {
   name: string;
@@ -43,6 +42,18 @@ export default function AuthPage() {
   const [serverError, setServerError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const nameValue = useWatch({ control: form.control, name: "name" }) || "";
+  const emailValue = useWatch({ control: form.control, name: "email" }) || "";
+  const passwordValue = useWatch({ control: form.control, name: "password" }) || "";
+  const confirmPasswordValue = useWatch({ control: form.control, name: "confirmPassword" }) || "";
+  const isAuthFormReady =
+    mode === "login"
+      ? emailValue.trim().length > 0 && passwordValue.trim().length > 0
+      : nameValue.trim().length > 0 &&
+        emailValue.trim().length > 0 &&
+        passwordValue.trim().length > 0 &&
+        confirmPasswordValue.trim().length > 0;
 
   const inputBaseClassName = "h-12 bg-white dark:bg-zinc-800 border-2 border-zinc-200 dark:border-zinc-700 focus:border-cyan-500 focus:ring-cyan-500 rounded-lg transition-all duration-300 focus:scale-[1.01]";
 
@@ -370,7 +381,7 @@ export default function AuthPage() {
             <Button
               type="submit"
               className="w-full h-12 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg uppercase tracking-wide hover:scale-[1.01] active:scale-[0.99]"
-              disabled={isLoading}
+              disabled={isLoading || !isAuthFormReady}
             >
               {isLoading
                 ? mode === "login"

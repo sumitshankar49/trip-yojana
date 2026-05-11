@@ -57,6 +57,7 @@ export async function PUT(
         trip: {
           select: {
             id: true,
+            budget: true,
             title: true,
             destination: true,
             source: true,
@@ -103,9 +104,22 @@ export async function PUT(
     if (date) updateData.date = new Date(date);
     if (notes !== undefined) updateData.notes = notes;
 
-    const updatedExpense = await prisma.expense.update({
-      where: { id: expenseId },
-      data: updateData,
+    const updatedExpense = await prisma.$transaction(async (tx) => {
+      const nextExpense = await tx.expense.update({
+        where: { id: expenseId },
+        data: updateData,
+      });
+
+      if (typeof amount === "number") {
+        const delta = amount - expense.amount;
+        const nextBudget = Math.max(0, Math.round((expense.trip.budget - delta) * 100) / 100);
+        await tx.trip.update({
+          where: { id: expense.trip.id },
+          data: { budget: nextBudget },
+        });
+      }
+
+      return nextExpense;
     });
 
     // Send email notifications to newly added members (non-blocking)
@@ -188,6 +202,14 @@ export async function DELETE(
           userId,
         },
       },
+      include: {
+        trip: {
+          select: {
+            id: true,
+            budget: true,
+          },
+        },
+      },
     });
 
     if (!expense) {
@@ -197,8 +219,16 @@ export async function DELETE(
       );
     }
 
-    await prisma.expense.delete({
-      where: { id: expenseId },
+    await prisma.$transaction(async (tx) => {
+      await tx.expense.delete({
+        where: { id: expenseId },
+      });
+
+      const nextBudget = Math.max(0, Math.round((expense.trip.budget + expense.amount) * 100) / 100);
+      await tx.trip.update({
+        where: { id: expense.tripId },
+        data: { budget: nextBudget },
+      });
     });
 
     return NextResponse.json(

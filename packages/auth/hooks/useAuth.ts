@@ -2,7 +2,7 @@
 
 import { signOut as nextAuthSignOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/packages/lib/toast";
 
 export function useAuth() {
   const router = useRouter();

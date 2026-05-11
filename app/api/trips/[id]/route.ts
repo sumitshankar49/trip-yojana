@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/backend/lib/auth";
 import prisma from "@/backend/config/prisma";
+import { fetchPincodeLocation } from "@/packages/lib/pincode";
 
 export const runtime = "nodejs";
 
@@ -119,12 +120,75 @@ export async function PUT(
 
     const body = await req.json();
 
+    const nextSource = typeof body.source === "string" ? body.source.trim() : existingTrip.source || "";
+    const nextDestination = typeof body.destination === "string" ? body.destination.trim() : existingTrip.destination;
+    const nextSourcePincode = typeof body.sourcePincode === "string" ? body.sourcePincode.trim() : existingTrip.sourcePincode || "";
+    const nextDestinationPincode = typeof body.destinationPincode === "string" ? body.destinationPincode.trim() : existingTrip.destinationPincode || "";
+
+    if (nextSourcePincode && !/^\d{6}$/.test(nextSourcePincode)) {
+      return NextResponse.json(
+        { success: false, message: "Source pincode must be exactly 6 digits" },
+        { status: 400 }
+      );
+    }
+
+    if (nextDestinationPincode && !/^\d{6}$/.test(nextDestinationPincode)) {
+      return NextResponse.json(
+        { success: false, message: "Destination pincode must be exactly 6 digits" },
+        { status: 400 }
+      );
+    }
+
+    const duplicateTrip = await prisma.trip.findFirst({
+      where: {
+        userId,
+        id: { not: tripId },
+        source: { equals: nextSource, mode: "insensitive" },
+        destination: { equals: nextDestination, mode: "insensitive" },
+        startDate: body.startDate ? new Date(body.startDate) : existingTrip.startDate,
+        endDate: body.endDate ? new Date(body.endDate) : existingTrip.endDate,
+      },
+      select: { id: true },
+    });
+
+    if (duplicateTrip) {
+      return NextResponse.json(
+        { success: false, message: "A trip with the same source, destination, and dates already exists." },
+        { status: 409 }
+      );
+    }
+
+    const [sourceLocation, destinationLocation] = await Promise.all([
+      nextSourcePincode ? fetchPincodeLocation(nextSourcePincode) : Promise.resolve(null),
+      nextDestinationPincode ? fetchPincodeLocation(nextDestinationPincode) : Promise.resolve(null),
+    ]);
+
+    if (nextSourcePincode && !sourceLocation) {
+      return NextResponse.json(
+        { success: false, message: "Could not resolve source pincode" },
+        { status: 400 }
+      );
+    }
+
+    if (nextDestinationPincode && !destinationLocation) {
+      return NextResponse.json(
+        { success: false, message: "Could not resolve destination pincode" },
+        { status: 400 }
+      );
+    }
+
     const trip = await prisma.trip.update({
       where: { id: tripId },
       data: {
         title: body.title,
-        source: body.source,
-        destination: body.destination,
+        source: nextSource,
+        sourcePincode: sourceLocation?.pincode ?? existingTrip.sourcePincode,
+        sourceState: sourceLocation?.state ?? existingTrip.sourceState,
+        sourceCountry: sourceLocation?.country ?? existingTrip.sourceCountry,
+        destination: nextDestination,
+        destinationPincode: destinationLocation?.pincode ?? existingTrip.destinationPincode,
+        destinationState: destinationLocation?.state ?? existingTrip.destinationState,
+        destinationCountry: destinationLocation?.country ?? existingTrip.destinationCountry,
         startDate: body.startDate ? new Date(body.startDate) : undefined,
         endDate: body.endDate ? new Date(body.endDate) : undefined,
         budget: body.budget ? Number(body.budget) : undefined,

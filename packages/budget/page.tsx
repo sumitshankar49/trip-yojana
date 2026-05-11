@@ -8,7 +8,7 @@ import { TripFilter, type TripOption } from "@/packages/components/shared/TripFi
 import { motion } from "framer-motion";
 import { CardSkeleton } from "@/packages/components/ui/skeleton";
 
-import { toast } from "sonner";
+import { toast } from "@/packages/lib/toast";
 import { BUDGET_LABELS, BUDGET_MESSAGES, getProgressColor } from "./constants";
 import type { ApiTrip } from "./types";
 
@@ -132,7 +132,7 @@ export default function BudgetPage() {
       <Navbar />
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="w-full px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-14">
         {/* Page Header */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }}

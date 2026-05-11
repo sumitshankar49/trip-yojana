@@ -4,9 +4,49 @@ import prisma from "@/backend/config/prisma";
 
 export const runtime = "nodejs";
 
+function parseCoordinate(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const normalizedValue =
+    typeof value === "string"
+      ? value.trim().replace(",", ".")
+      : value;
+  const parsed = typeof normalizedValue === "number" ? normalizedValue : Number(normalizedValue);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isCoordinateInRange(lat: number, lng: number): boolean {
+  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+
 // Enhanced geocoding helper with multiple strategies
-async function geocodeAddress(query: string): Promise<{ lat: number; lng: number } | null> {
+async function geocodeAddress(query: string): Promise<{ lat: number; lng: number; resolvedAddress?: string } | null> {
   try {
+    const tokenize = (value: string): string[] => {
+      const stopWords = new Set([
+        "near",
+        "close",
+        "beside",
+        "adjacent",
+        "to",
+        "the",
+        "and",
+        "city",
+        "state",
+        "road",
+      ]);
+
+      return value
+        .toLowerCase()
+        .replace(/[^a-z0-9\s,]/g, " ")
+        .split(/[\s,]+/)
+        .map((token) => token.trim())
+        .filter((token) => token.length > 2 && !stopWords.has(token));
+    };
+
     // Helper to extract location components
     const extractLocationParts = (address: string) => {
       const parts = address.split(',').map(p => p.trim());
@@ -18,6 +58,7 @@ async function geocodeAddress(query: string): Promise<{ lat: number; lng: number
     };
 
     const { city, state, landmark, parts } = extractLocationParts(query);
+  const originalTokens = tokenize(query);
 
     // Generate multiple search strategies - from specific to general
     const searchQueries = [
@@ -60,14 +101,39 @@ async function geocodeAddress(query: string): Promise<{ lat: number; lng: number
         const data = await response.json();
         
         if (data && data.length > 0) {
+          const topResult = data[0];
+          const displayName = String(topResult.display_name || "");
+          const searchTokens = tokenize(searchQuery);
+          const resultTokens = tokenize(displayName);
+          const overlapCount = originalTokens.filter((token) => resultTokens.includes(token)).length;
+          const isBroadFallback = searchTokens.length <= 2 && originalTokens.length >= 3;
+
+          if (isBroadFallback && overlapCount < 2) {
+            console.log(`Skipping low-confidence geocode result for "${searchQuery}":`, {
+              displayName,
+              overlapCount,
+              originalTokenCount: originalTokens.length,
+            });
+
+            await new Promise(resolve => setTimeout(resolve, 300));
+            continue;
+          }
+
+          const parsedLat = parseFloat(topResult.lat);
+          const parsedLng = parseFloat(topResult.lon);
+          if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
+            continue;
+          }
+
           console.log(`✓ Geocoded "${searchQuery}" successfully:`, {
-            lat: data[0].lat,
-            lon: data[0].lon,
-            display_name: data[0].display_name
+            lat: topResult.lat,
+            lon: topResult.lon,
+            display_name: topResult.display_name
           });
           return {
-            lat: parseFloat(data[0].lat),
-            lng: parseFloat(data[0].lon),
+            lat: parsedLat,
+            lng: parsedLng,
+            resolvedAddress: displayName || undefined,
           };
         }
       } catch (err) {
@@ -119,7 +185,13 @@ export async function GET(req: NextRequest) {
       orderBy: { order: "asc" },
     });
 
-    return NextResponse.json({ places }, { status: 200 });
+    const sanitizedPlaces = places.filter((place) => {
+      const lat = parseCoordinate(place.lat);
+      const lng = parseCoordinate(place.lng);
+      return lat !== null && lng !== null && isCoordinateInRange(lat, lng);
+    });
+
+    return NextResponse.json({ places: sanitizedPlaces }, { status: 200 });
   } catch (error) {
     console.error("Places GET error:", error);
     return NextResponse.json(
@@ -140,12 +212,24 @@ export async function POST(req: NextRequest) {
     const { tripId, name, description, category, time } = body;
     let { lat, lng, address } = body;
 
+    const normalizedAddress = typeof address === "string" ? address.trim() : "";
+    const normalizedTime = typeof time === "string" ? time.trim() : "";
+
     if (!tripId || !name || !category) {
       return NextResponse.json(
         { error: "Missing required fields (tripId, name, category)" },
         { status: 400 }
       );
     }
+
+    if (!normalizedAddress || !normalizedTime) {
+      return NextResponse.json(
+        { error: "Address and visit time are required" },
+        { status: 400 }
+      );
+    }
+
+    address = normalizedAddress;
 
     // If coordinates are missing, try to geocode from address or name
     if ((lat === undefined || lng === undefined || lat === null || lng === null || lat === "" || lng === "") && (address || name)) {
@@ -172,11 +256,8 @@ export async function POST(req: NextRequest) {
         lat = coords.lat;
         lng = coords.lng;
         console.log(`Successfully geocoded to: lat=${lat}, lng=${lng}`);
-        
-        // If address wasn't provided, save the geocoding query as address
-        if (!address) {
-          address = geocodeQuery;
-        }
+
+        address = coords.resolvedAddress || address || geocodeQuery;
       } else {
         console.error(`Geocoding failed for: "${geocodeQuery}"`);
         
@@ -205,9 +286,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (lat === undefined || lng === undefined) {
+    const parsedLat = parseCoordinate(lat);
+    const parsedLng = parseCoordinate(lng);
+
+    if (parsedLat === null || parsedLng === null) {
       return NextResponse.json(
-        { error: "Latitude and longitude are required" },
+        { error: "Latitude and longitude are required and must be valid numbers" },
+        { status: 400 }
+      );
+    }
+
+    if (!isCoordinateInRange(parsedLat, parsedLng)) {
+      return NextResponse.json(
+        { error: "Latitude/longitude are out of valid range" },
         { status: 400 }
       );
     }
@@ -239,11 +330,11 @@ export async function POST(req: NextRequest) {
         tripId,
         name,
         description: description || null,
-        lat,
-        lng,
+        lat: parsedLat,
+        lng: parsedLng,
         category,
-        address: address || null,
-        time: time || null,
+        address,
+        time: normalizedTime,
         order: nextOrder,
       },
     });

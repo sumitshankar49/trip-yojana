@@ -1,41 +1,77 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/packages/components/ui/card";
 import { Button } from "@/packages/components/ui/button";
+import { Input } from "@/packages/components/ui/input";
 import Navbar from "@/packages/components/shared/Navbar";
+import ConfirmationModal from "@/packages/components/shared/ConfirmationModal";
 import SearchBar from "@/packages/components/shared/SearchBar";
 import EmptyState from "@/packages/components/shared/EmptyState";
 import { StatCard } from "@/packages/components/dashboard/StatCard";
 import { SmartGreeting } from "@/packages/components/dashboard/SmartGreeting";
 import { motion } from "framer-motion";
 import { TripCardSkeleton } from "@/packages/components/ui/skeleton";
-import { toast } from "sonner";
+import { toast } from "@/packages/lib/toast";
 import { useAuth } from "@/packages/hooks/useAuth";
 import AuthLoading from "@/packages/components/auth/AuthLoading";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/packages/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Trip } from "./types";
 import { DASHBOARD_LABELS, DASHBOARD_MESSAGES } from "./constants";
 import { formatDate, formatCurrency } from "./helpers";
+import { Loader2, MoreVertical, PencilLine, Trash2 } from "lucide-react";
+import { fetchPincodeLocation } from "@/packages/lib/pincode";
 
 type ApiTrip = {
   _id: string;
   title: string;
   source?: string;
+  sourcePincode?: string;
+  sourceState?: string;
+  sourceCountry?: string;
+  destination?: string;
+  destinationPincode?: string;
+  destinationState?: string;
+  destinationCountry?: string;
   budget: number;
   startDate: string;
   endDate: string;
   places?: string[];
+  travelType?: string;
 };
 
 function mapApiTripToDashboardTrip(trip: ApiTrip): Trip {
   return {
     id: String(trip._id),
-    destination: trip.source || trip.title,
+    title: trip.title,
+    source: trip.source,
+    sourcePincode: trip.sourcePincode,
+    sourceState: trip.sourceState,
+    sourceCountry: trip.sourceCountry,
+    destination: trip.destination || trip.source || trip.title,
+    destinationPincode: trip.destinationPincode,
+    destinationState: trip.destinationState,
+    destinationCountry: trip.destinationCountry,
     startDate: trip.startDate,
     endDate: trip.endDate,
     budget: Number(trip.budget || 0),
     currency: "INR",
+    travelType: trip.travelType,
   };
 }
 
@@ -46,58 +82,267 @@ export default function DashboardPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
+  const [isEditTripOpen, setIsEditTripOpen] = useState(false);
+  const [isTripSaving, setIsTripSaving] = useState(false);
+  const [tripPendingDelete, setTripPendingDelete] = useState<Trip | null>(null);
+  const [isTripDeleting, setIsTripDeleting] = useState(false);
+  const [editSourceLocation, setEditSourceLocation] = useState({ district: "", state: "", region: "", country: "", loading: false, error: "" });
+  const [editDestinationLocation, setEditDestinationLocation] = useState({ district: "", state: "", region: "", country: "", loading: false, error: "" });
+  const [tripEditForm, setTripEditForm] = useState({
+    id: "",
+    title: "",
+    source: "",
+    sourcePincode: "",
+    destination: "",
+    destinationPincode: "",
+    budget: "",
+    startDate: "",
+    endDate: "",
+    travelType: "leisure",
+  });
 
-  useEffect(() => {
-    let isMounted = true;
+  const formatDateForInput = (dateValue: string) => {
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
 
-    const loadTrips = async () => {
-      // Only load trips if authenticated
-      if (status !== "authenticated") {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const loadTrips = useCallback(async () => {
+    if (status !== "authenticated") {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/trips", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data?.message || DASHBOARD_MESSAGES.LOAD_TRIPS_FAILED);
+        setTrips([]);
         return;
       }
 
-      try {
-        const response = await fetch("/api/trips", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          cache: "no-store",
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          toast.error(data?.message || DASHBOARD_MESSAGES.LOAD_TRIPS_FAILED);
-          if (isMounted) {
-            setTrips([]);
-          }
-          return;
-        }
-
-        if (isMounted) {
-          const apiTrips = Array.isArray(data?.trips) ? (data.trips as ApiTrip[]) : [];
-          setTrips(apiTrips.map(mapApiTripToDashboardTrip));
-        }
-      } catch (error) {
-        console.error("Dashboard trips load error:", error);
-        toast.error(DASHBOARD_MESSAGES.LOAD_TRIPS_ERROR);
-        if (isMounted) {
-          setTrips([]);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    loadTrips();
-
-    return () => {
-      isMounted = false;
-    };
+      const apiTrips = Array.isArray(data?.trips) ? (data.trips as ApiTrip[]) : [];
+      setTrips(apiTrips.map(mapApiTripToDashboardTrip));
+    } catch (error) {
+      console.error("Dashboard trips load error:", error);
+      toast.error(DASHBOARD_MESSAGES.LOAD_TRIPS_ERROR);
+      setTrips([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, [status]);
+
+  const handleOpenTripEditor = (trip: Trip) => {
+    setEditingTrip(trip);
+    setTripEditForm({
+      id: trip.id,
+      title: trip.title || `${trip.source || trip.destination} to ${trip.destination}`,
+      source: trip.source || "",
+      sourcePincode: trip.sourcePincode || "",
+      destination: trip.destination,
+      destinationPincode: trip.destinationPincode || "",
+      budget: String(trip.budget || 0),
+      startDate: formatDateForInput(trip.startDate),
+      endDate: formatDateForInput(trip.endDate),
+      travelType: trip.travelType || "leisure",
+    });
+    setEditSourceLocation({
+      district: "",
+      state: trip.sourceState || "",
+      region: "",
+      country: trip.sourceCountry || "",
+      loading: false,
+      error: "",
+    });
+    setEditDestinationLocation({
+      district: "",
+      state: trip.destinationState || "",
+      region: "",
+      country: trip.destinationCountry || "",
+      loading: false,
+      error: "",
+    });
+    setIsEditTripOpen(true);
+  };
+
+  useEffect(() => {
+    const lookup = async (
+      pincode: string,
+      setLocation: Dispatch<SetStateAction<{ district: string; state: string; region: string; country: string; loading: boolean; error: string }>>,
+      enabled: boolean,
+      loadingError: string
+    ) => {
+      if (!enabled || pincode.trim().length !== 6) {
+        setLocation((previous) => ({ ...previous, loading: false, error: pincode.trim() ? previous.error : "" }));
+        return;
+      }
+
+      setLocation((previous) => ({ ...previous, loading: true, error: "" }));
+      const location = await fetchPincodeLocation(pincode);
+      setLocation({
+        district: location?.district || "",
+        state: location?.state || "",
+        region: location?.region || "",
+        country: location?.country || "",
+        loading: false,
+        error: location ? "" : loadingError,
+      });
+    };
+
+    void lookup(tripEditForm.sourcePincode, setEditSourceLocation, isEditTripOpen, "Could not resolve source pincode");
+  }, [isEditTripOpen, tripEditForm.sourcePincode]);
+
+  useEffect(() => {
+    const lookup = async (
+      pincode: string,
+      setLocation: Dispatch<SetStateAction<{ district: string; state: string; region: string; country: string; loading: boolean; error: string }>>,
+      enabled: boolean,
+      loadingError: string
+    ) => {
+      if (!enabled || pincode.trim().length !== 6) {
+        setLocation((previous) => ({ ...previous, loading: false, error: pincode.trim() ? previous.error : "" }));
+        return;
+      }
+
+      setLocation((previous) => ({ ...previous, loading: true, error: "" }));
+      const location = await fetchPincodeLocation(pincode);
+      setLocation({
+        district: location?.district || "",
+        state: location?.state || "",
+        region: location?.region || "",
+        country: location?.country || "",
+        loading: false,
+        error: location ? "" : loadingError,
+      });
+    };
+
+    void lookup(tripEditForm.destinationPincode, setEditDestinationLocation, isEditTripOpen, "Could not resolve destination pincode");
+  }, [isEditTripOpen, tripEditForm.destinationPincode]);
+
+  const handleTripUpdate = async () => {
+    if (!tripEditForm.id) {
+      return;
+    }
+
+    if (!tripEditForm.source.trim() || !tripEditForm.destination.trim()) {
+      toast.error("Source and destination are required");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(tripEditForm.sourcePincode.trim())) {
+      toast.error("Source pincode must be exactly 6 digits");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(tripEditForm.destinationPincode.trim())) {
+      toast.error("Destination pincode must be exactly 6 digits");
+      return;
+    }
+
+    if (!editSourceLocation.state || !editSourceLocation.country) {
+      toast.error("Resolve the source pincode before saving");
+      return;
+    }
+
+    if (!editDestinationLocation.state || !editDestinationLocation.country) {
+      toast.error("Resolve the destination pincode before saving");
+      return;
+    }
+
+    if (!tripEditForm.startDate || !tripEditForm.endDate) {
+      toast.error("Start and end dates are required");
+      return;
+    }
+
+    setIsTripSaving(true);
+    try {
+      const response = await fetch(`/api/trips/${tripEditForm.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: tripEditForm.title.trim() || `${tripEditForm.source.trim()} to ${tripEditForm.destination.trim()}`,
+          source: tripEditForm.source.trim(),
+          sourcePincode: tripEditForm.sourcePincode.trim(),
+          sourceState: editSourceLocation.state,
+          sourceCountry: editSourceLocation.country,
+          destination: tripEditForm.destination.trim(),
+          destinationPincode: tripEditForm.destinationPincode.trim(),
+          destinationState: editDestinationLocation.state,
+          destinationCountry: editDestinationLocation.country,
+          budget: Number(tripEditForm.budget),
+          startDate: new Date(tripEditForm.startDate).toISOString(),
+          endDate: new Date(tripEditForm.endDate).toISOString(),
+          travelType: tripEditForm.travelType.trim() || "leisure",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data?.message || "Failed to update trip");
+        return;
+      }
+
+      toast.success("Trip updated successfully");
+      setIsEditTripOpen(false);
+      setEditingTrip(null);
+      await loadTrips();
+    } catch (error) {
+      console.error("Update trip error:", error);
+      toast.error("Failed to update trip");
+    } finally {
+      setIsTripSaving(false);
+    }
+  };
+
+  const handleTripDelete = async () => {
+    if (!tripPendingDelete) {
+      return;
+    }
+
+    setIsTripDeleting(true);
+    try {
+      const response = await fetch(`/api/trips/${tripPendingDelete.id}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data?.message || "Failed to delete trip");
+        return;
+      }
+
+      toast.success("Trip deleted successfully");
+      setTripPendingDelete(null);
+      await loadTrips();
+    } catch (error) {
+      console.error("Delete trip error:", error);
+      toast.error("Failed to delete trip");
+    } finally {
+      setIsTripDeleting(false);
+    }
+  };
+
+
+  useEffect(() => {
+    loadTrips();
+  }, [loadTrips]);
 
   const handleTripClick = (tripName: string) => {
     toast.success(`Opening ${tripName}`, {
@@ -366,9 +611,9 @@ export default function DashboardPage() {
               >
                 <Card className="h-full hover:shadow-2xl transition-shadow duration-300 group border-zinc-200 dark:border-zinc-800 hover:border-primary/50">
                   <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-xl group-hover:text-primary transition-colors">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <CardTitle className="truncate text-xl transition-colors group-hover:text-primary">
                           {trip.destination}
                         </CardTitle>
                         <CardDescription className="mt-1.5 flex items-center gap-1.5">
@@ -380,7 +625,7 @@ export default function DashboardPage() {
                             strokeWidth="2"
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            className="w-4 h-4"
+                            className="h-4 w-4"
                           >
                             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                             <line x1="16" y1="2" x2="16" y2="6" />
@@ -390,6 +635,27 @@ export default function DashboardPage() {
                           {formatDate(trip.startDate)} - {formatDate(trip.endDate)}
                         </CardDescription>
                       </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon-sm" className="shrink-0">
+                            <MoreVertical className="h-4 w-4" />
+                            <span className="sr-only">Trip actions</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem onClick={() => handleOpenTripEditor(trip)}>
+                            <PencilLine className="h-4 w-4" />
+                            Edit Trip
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => setTripPendingDelete(trip)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete Trip
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -485,6 +751,145 @@ export default function DashboardPage() {
           </motion.div>
         )}
       </main>
+
+      <Dialog open={isEditTripOpen} onOpenChange={setIsEditTripOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Trip</DialogTitle>
+            <DialogDescription>Update the trip details and save the changes.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Trip Title</label>
+              <Input
+                value={tripEditForm.title}
+                onChange={(event) => setTripEditForm((previous) => ({ ...previous, title: event.target.value }))}
+                placeholder="Trip title"
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Source</label>
+                <Input
+                  value={tripEditForm.source}
+                  onChange={(event) => setTripEditForm((previous) => ({ ...previous, source: event.target.value }))}
+                  placeholder="From"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Destination</label>
+                <Input
+                  value={tripEditForm.destination}
+                  onChange={(event) => setTripEditForm((previous) => ({ ...previous, destination: event.target.value }))}
+                  placeholder="To"
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Source Pincode</label>
+                <Input
+                  value={tripEditForm.sourcePincode}
+                  onChange={(event) => setTripEditForm((previous) => ({ ...previous, sourcePincode: event.target.value.replace(/\D/g, "").slice(0, 6) }))}
+                  placeholder="6-digit source pincode"
+                  inputMode="numeric"
+                  maxLength={6}
+                />
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {editSourceLocation.loading
+                    ? "Resolving location..."
+                    : editSourceLocation.district || editSourceLocation.state || editSourceLocation.region || editSourceLocation.country
+                      ? [editSourceLocation.district, editSourceLocation.state, editSourceLocation.region, editSourceLocation.country].filter(Boolean).join(", ")
+                      : editSourceLocation.error}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Destination Pincode</label>
+                <Input
+                  value={tripEditForm.destinationPincode}
+                  onChange={(event) => setTripEditForm((previous) => ({ ...previous, destinationPincode: event.target.value.replace(/\D/g, "").slice(0, 6) }))}
+                  placeholder="6-digit destination pincode"
+                  inputMode="numeric"
+                  maxLength={6}
+                />
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {editDestinationLocation.loading
+                    ? "Resolving location..."
+                    : editDestinationLocation.district || editDestinationLocation.state || editDestinationLocation.region || editDestinationLocation.country
+                      ? [editDestinationLocation.district, editDestinationLocation.state, editDestinationLocation.region, editDestinationLocation.country].filter(Boolean).join(", ")
+                      : editDestinationLocation.error}
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Start Date</label>
+                <Input
+                  type="date"
+                  value={tripEditForm.startDate}
+                  onChange={(event) => setTripEditForm((previous) => ({ ...previous, startDate: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">End Date</label>
+                <Input
+                  type="date"
+                  value={tripEditForm.endDate}
+                  onChange={(event) => setTripEditForm((previous) => ({ ...previous, endDate: event.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Budget</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={tripEditForm.budget}
+                  onChange={(event) => setTripEditForm((previous) => ({ ...previous, budget: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Travel Type</label>
+                <Input
+                  value={tripEditForm.travelType}
+                  onChange={(event) => setTripEditForm((previous) => ({ ...previous, travelType: event.target.value }))}
+                  placeholder="leisure"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditTripOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleTripUpdate} disabled={isTripSaving} className="gap-2">
+              {isTripSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {isTripSaving ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmationModal
+        open={Boolean(tripPendingDelete)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTripPendingDelete(null);
+          }
+        }}
+        title="Delete Trip"
+        description={tripPendingDelete
+          ? `Delete ${tripPendingDelete.destination}? This will permanently remove the trip, itinerary, budgets, and related records.`
+          : "Delete this trip and all related records."}
+        confirmLabel="Delete Trip"
+        onConfirm={handleTripDelete}
+        isConfirming={isTripDeleting}
+      />
     </div>
   );
 }

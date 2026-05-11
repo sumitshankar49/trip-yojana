@@ -5,10 +5,10 @@ import { CATEGORY_COLORS, CATEGORY_ICONS } from "../constants";
 
 export function SelectedPlaceOverlay({ place, onClose }: SelectedPlaceOverlayProps) {
   return (
-    <Card className="absolute top-4 right-4 z-1000 shadow-xl max-w-sm bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm pointer-events-auto">
+    <Card className="absolute bottom-4 left-4 right-4 z-1000 shadow-xl bg-white/95 backdrop-blur-sm pointer-events-auto dark:bg-zinc-900/95 md:bottom-auto md:left-auto md:right-4 md:top-4 md:max-w-sm">
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-2">
-          <h3 className="font-bold text-lg text-zinc-900 dark:text-zinc-50">
+          <h3 className="pr-3 font-bold text-base md:text-lg text-zinc-900 dark:text-zinc-50">
             {place.name}
           </h3>
           <button
@@ -31,16 +31,16 @@ export function SelectedPlaceOverlay({ place, onClose }: SelectedPlaceOverlayPro
             </svg>
           </button>
         </div>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
+        <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
           {place.description}
         </p>
         {place.address && (
-          <p className="text-xs text-zinc-500 dark:text-zinc-500">
+          <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-500">
             📍 {place.address}
           </p>
         )}
         {place.time && (
-          <p className="text-xs text-zinc-500 dark:text-zinc-500 mt-1">
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
             🕐 {place.time}
           </p>
         )}

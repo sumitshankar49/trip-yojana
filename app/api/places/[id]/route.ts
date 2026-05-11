@@ -4,6 +4,24 @@ import prisma from "@/backend/config/prisma";
 
 export const runtime = "nodejs";
 
+function parseCoordinate(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const normalizedValue =
+    typeof value === "string"
+      ? value.trim().replace(",", ".")
+      : value;
+  const parsed = typeof normalizedValue === "number" ? normalizedValue : Number(normalizedValue);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isCoordinateInRange(lat: number, lng: number): boolean {
+  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+
 async function getAuthorizedUserId() {
   const session = await auth();
   if (!session?.user?.id) {
@@ -32,6 +50,40 @@ export async function PUT(
     const body = await req.json();
     const { name, description, lat, lng, category, address, time, order } = body;
 
+    const hasLat = lat !== undefined;
+    const hasLng = lng !== undefined;
+    if (hasLat !== hasLng) {
+      return NextResponse.json(
+        { error: "Latitude and longitude must be provided together" },
+        { status: 400 }
+      );
+    }
+
+    let parsedLat: number | undefined;
+    let parsedLng: number | undefined;
+
+    if (hasLat && hasLng) {
+      const latValue = parseCoordinate(lat);
+      const lngValue = parseCoordinate(lng);
+
+      if (latValue === null || lngValue === null) {
+        return NextResponse.json(
+          { error: "Latitude and longitude must be valid numbers" },
+          { status: 400 }
+        );
+      }
+
+      if (!isCoordinateInRange(latValue, lngValue)) {
+        return NextResponse.json(
+          { error: "Latitude/longitude are out of valid range" },
+          { status: 400 }
+        );
+      }
+
+      parsedLat = latValue;
+      parsedLng = lngValue;
+    }
+
     // Verify place ownership through trip
     const place = await prisma.tripPlace.findFirst({
       where: { id: placeId },
@@ -48,8 +100,8 @@ export async function PUT(
       data: {
         ...(name !== undefined && { name }),
         ...(description !== undefined && { description }),
-        ...(lat !== undefined && { lat }),
-        ...(lng !== undefined && { lng }),
+        ...(parsedLat !== undefined && { lat: parsedLat }),
+        ...(parsedLng !== undefined && { lng: parsedLng }),
         ...(category !== undefined && { category }),
         ...(address !== undefined && { address }),
         ...(time !== undefined && { time }),

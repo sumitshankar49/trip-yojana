@@ -4,10 +4,13 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Navbar from "@/packages/components/shared/Navbar";
+import ConfirmationModal from "@/packages/components/shared/ConfirmationModal";
 import { TripFilter, type TripOption } from "@/packages/components/shared/TripFilter";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/packages/components/ui/tabs";
 import { PlacesList, SelectedPlaceOverlay, AddPlaceForm } from "./components";
 import type { Place, MapComponentProps } from "./types";
-import { toast } from "sonner";
+import { toast } from "@/packages/lib/toast";
+import { MapPinned, UtensilsCrossed } from "lucide-react";
 
 type ApiTrip = {
   _id: string;
@@ -21,12 +24,41 @@ type DbPlace = {
   id: string;
   name: string;
   description?: string | null;
-  lat: number;
-  lng: number;
+  lat: number | string;
+  lng: number | string;
   category: string;
   address?: string | null;
   time?: string | null;
 };
+
+function toFiniteNumber(value: unknown): number | null {
+  const normalizedValue = typeof value === "string" ? value.trim().replace(",", ".") : value;
+  const parsed = typeof normalizedValue === "number" ? normalizedValue : Number(normalizedValue);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizePlace(raw: DbPlace | Place): Place | null {
+  const lat = toFiniteNumber(raw.lat);
+  const lng = toFiniteNumber(raw.lng);
+  if (lat === null || lng === null) {
+    return null;
+  }
+
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return null;
+  }
+
+  return {
+    id: raw.id,
+    name: raw.name,
+    description: raw.description || "",
+    lat,
+    lng,
+    category: raw.category as Place["category"],
+    address: raw.address || undefined,
+    time: raw.time || undefined,
+  } satisfies Place;
+}
 
 // Dynamic import for map component (client-side only)
 const MapComponent = dynamic<MapComponentProps>(
@@ -55,6 +87,9 @@ export default function MapPage() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [isPlacesLoading, setIsPlacesLoading] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [placePendingDelete, setPlacePendingDelete] = useState<Place | null>(null);
+  const [isPlaceDeleting, setIsPlaceDeleting] = useState(false);
+  const [mobileTab, setMobileTab] = useState("map");
 
   useEffect(() => {
     let isMounted = true;
@@ -75,7 +110,7 @@ export default function MapPage() {
         const apiTrips = Array.isArray(data?.trips) ? (data.trips as ApiTrip[]) : [];
         const mappedTrips: TripOption[] = apiTrips.map((trip) => ({
           id: String(trip._id),
-          destination: trip.source || trip.title,
+          destination: trip.destination || trip.source || trip.title,
         }));
 
         if (!isMounted) {
@@ -144,17 +179,9 @@ export default function MapPage() {
 
         if (isMounted) {
           const dbPlaces = data.places || [];
-          // Convert database format to Place format
-          const convertedPlaces: Place[] = dbPlaces.map((p: DbPlace) => ({
-            id: p.id,
-            name: p.name,
-            description: p.description || "",
-            lat: p.lat,
-            lng: p.lng,
-            category: p.category as Place["category"],
-            address: p.address || undefined,
-            time: p.time || undefined,
-          }));
+          const convertedPlaces: Place[] = dbPlaces
+            .map((p: DbPlace) => normalizePlace(p))
+            .filter((place: Place | null): place is Place => place !== null);
           setPlaces(convertedPlaces);
         }
       } catch (error) {
@@ -176,10 +203,24 @@ export default function MapPage() {
     };
   }, [selectedTripId]);
 
+  const requestRemovePlace = (placeId: string) => {
+    const target = places.find((place) => place.id === placeId);
+    if (!target) {
+      toast.error("Place not found");
+      return;
+    }
+    setPlacePendingDelete(target);
+  };
+
   // Remove place handler
-  const removePlace = async (placeId: string) => {
+  const removePlace = async () => {
+    if (!placePendingDelete) {
+      return;
+    }
+
+    setIsPlaceDeleting(true);
     try {
-      const response = await fetch(`/api/places/${placeId}`, {
+      const response = await fetch(`/api/places/${placePendingDelete.id}`, {
         method: "DELETE",
       });
 
@@ -189,20 +230,29 @@ export default function MapPage() {
       }
 
       // Remove from local state
-      setPlaces((prev) => prev.filter((p) => p.id !== placeId));
-      if (selectedPlace?.id === placeId) {
+      setPlaces((prev) => prev.filter((p) => p.id !== placePendingDelete.id));
+      if (selectedPlace?.id === placePendingDelete.id) {
         setSelectedPlace(null);
       }
+      setPlacePendingDelete(null);
       toast.success("Place removed");
     } catch (error) {
       console.error("Remove place error:", error);
       toast.error("Failed to remove place");
+    } finally {
+      setIsPlaceDeleting(false);
     }
   };
 
   // Add place handler
   const handlePlaceAdded = (newPlace: Place) => {
-    setPlaces((prev) => [...prev, newPlace]);
+    const normalizedPlace = normalizePlace(newPlace);
+    if (!normalizedPlace) {
+      toast.error("Place has invalid coordinates and cannot be shown on map");
+      return;
+    }
+
+    setPlaces((prev) => [...prev, normalizedPlace]);
   };
 
   // Auto-select place when destination is provided
@@ -278,21 +328,89 @@ export default function MapPage() {
         </div>
       ) : (
         // Map View with Trips
-        <div className="flex h-[calc(100vh-64px)]">
-          {/* LEFT PANEL */}
-          <div className="w-100 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col shrink-0">
-            {/* Trip Filter */}
-            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
-              <TripFilter 
-                selectedTripId={selectedTripId} 
-                onTripChange={setSelectedTripId} 
+        <div className="mx-auto flex min-h-[calc(100vh-64px)] w-full max-w-400 flex-col lg:flex-row">
+          {/* Mobile summary + switcher */}
+          <div className="border-b border-zinc-200 bg-white px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900 lg:hidden">
+            <div className="mb-3">
+              <TripFilter
+                selectedTripId={selectedTripId}
+                onTripChange={setSelectedTripId}
                 trips={trips}
                 isLoading={isTripsLoading}
                 className="w-full"
               />
             </div>
 
-            {/* Trip Selected Status */}
+            {selectedTripId && (
+              <div className="rounded-xl bg-cyan-50 px-3 py-2 text-xs text-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-300">
+                <span className="font-medium">Selected: </span>
+                {trips.find((t) => t.id === selectedTripId)?.destination || "Trip"}
+              </div>
+            )}
+
+            <Tabs value={mobileTab} onValueChange={setMobileTab} className="mt-3">
+              <TabsList className="grid h-11 w-full grid-cols-2 rounded-2xl bg-zinc-100 p-1 dark:bg-zinc-800">
+                <TabsTrigger value="map" className="rounded-xl text-sm">Map</TabsTrigger>
+                <TabsTrigger value="places" className="rounded-xl text-sm">Places</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="map" className="mt-3">
+                <div className="relative h-[58vh] overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                  <MapComponent
+                    places={places}
+                    focusPlace={destination}
+                  />
+
+                  {selectedPlace && (
+                    <SelectedPlaceOverlay
+                      place={selectedPlace}
+                      onClose={() => setSelectedPlace(null)}
+                    />
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="places" className="mt-3 space-y-3">
+                {selectedTripId && (
+                  <AddPlaceForm
+                    tripId={selectedTripId}
+                    onPlaceAdded={handlePlaceAdded}
+                  />
+                )}
+
+                <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                  {isPlacesLoading ? (
+                    <div className="flex min-h-[30vh] items-center justify-center p-6">
+                      <div className="text-center">
+                        <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                        <p className="text-xs text-zinc-600 dark:text-zinc-400">Loading places...</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <PlacesList
+                      places={places}
+                      selectedPlace={selectedPlace}
+                      onSelectPlace={setSelectedPlace}
+                      onRemovePlace={requestRemovePlace}
+                    />
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          {/* Desktop LEFT PANEL */}
+          <div className="hidden lg:flex w-97.5 xl:w-105 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-col shrink-0">
+            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
+              <TripFilter
+                selectedTripId={selectedTripId}
+                onTripChange={setSelectedTripId}
+                trips={trips}
+                isLoading={isTripsLoading}
+                className="w-full"
+              />
+            </div>
+
             {selectedTripId && (
               <div className="px-4 pt-2 pb-3 bg-cyan-50 dark:bg-cyan-950/30 border-b border-cyan-200 dark:border-cyan-900">
                 <p className="text-xs text-cyan-700 dark:text-cyan-300">
@@ -302,20 +420,18 @@ export default function MapPage() {
               </div>
             )}
 
-            {/* Add Place Form */}
             {selectedTripId && (
-              <AddPlaceForm 
-                tripId={selectedTripId} 
-                onPlaceAdded={handlePlaceAdded} 
+              <AddPlaceForm
+                tripId={selectedTripId}
+                onPlaceAdded={handlePlaceAdded}
               />
             )}
-            
-            {/* Places List */}
+
             <div className="flex-1 overflow-hidden">
               {isPlacesLoading ? (
-                <div className="flex items-center justify-center h-full">
+                <div className="flex h-full items-center justify-center">
                   <div className="text-center">
-                    <div className="w-8 h-8 mx-auto mb-2 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                    <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
                     <p className="text-xs text-zinc-600 dark:text-zinc-400">Loading places...</p>
                   </div>
                 </div>
@@ -324,20 +440,19 @@ export default function MapPage() {
                   places={places}
                   selectedPlace={selectedPlace}
                   onSelectPlace={setSelectedPlace}
-                  onRemovePlace={removePlace}
+                  onRemovePlace={requestRemovePlace}
                 />
               )}
             </div>
           </div>
 
-          {/* RIGHT MAP */}
-          <div className="flex-1 relative">
-            <MapComponent 
-              places={places} 
+          {/* Desktop RIGHT MAP */}
+          <div className="relative min-h-[58vh] flex-1 lg:h-[calc(100vh-64px)]">
+            <MapComponent
+              places={places}
               focusPlace={destination}
             />
 
-            {/* Selected Place Info Overlay */}
             {selectedPlace && (
               <SelectedPlaceOverlay
                 place={selectedPlace}
@@ -347,6 +462,22 @@ export default function MapPage() {
           </div>
         </div>
       )}
+
+      <ConfirmationModal
+        open={Boolean(placePendingDelete)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPlacePendingDelete(null);
+          }
+        }}
+        title="Delete Place"
+        description={placePendingDelete
+          ? `Delete ${placePendingDelete.name} from this trip map? This place will be removed from saved places.`
+          : "Delete this place from your saved trip map."}
+        confirmLabel="Delete Place"
+        onConfirm={removePlace}
+        isConfirming={isPlaceDeleting}
+      />
     </div>
   );
 }

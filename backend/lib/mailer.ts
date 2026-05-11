@@ -416,3 +416,130 @@ export async function sendExpenseMemberInviteEmail(
   
   console.log(`[Mailer] Expense invite email sent to: ${memberEmail}`, data ? `(ID: ${data.id})` : '');
 }
+
+export async function sendGroupInviteEmail(
+  memberEmail: string,
+  inviterName: string,
+  groupName: string,
+  tripTitle: string,
+  inviteUrl?: string
+): Promise<void> {
+  const targetUrl = inviteUrl || `${APP_URL}/expenses`;
+
+  const { data, error } = await getResend().emails.send({
+    from: FROM_ADDRESS,
+    to: memberEmail,
+    subject: `${inviterName} added you to ${groupName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+        <div style="background: linear-gradient(135deg, #0ea5e9 0%, #0f766e 100%); padding: 28px 32px; text-align: center;">
+          <h1 style="color:#ffffff;font-size:24px;font-weight:bold;margin:0;">TripYojana</h1>
+          <p style="color: #d1fae5; font-size: 14px; margin: 8px 0 0;">Collaborative expense invite</p>
+        </div>
+        <div style="padding: 32px;">
+          <h2 style="margin: 0 0 14px; color: #0f172a;">You are invited to a group</h2>
+          <p style="margin: 0 0 14px; color: #334155; line-height: 1.7;">
+            <strong>${inviterName}</strong> invited you to the expense group <strong>${groupName}</strong> for trip <strong>${tripTitle}</strong>.
+          </p>
+          <p style="margin: 0 0 24px; color: #64748b; line-height: 1.7;">
+            Join the app to view expenses, split costs fairly, and settle balances with your group.
+          </p>
+          <div style="text-align: center;">
+            <a href="${targetUrl}" style="display:inline-block;padding:12px 24px;background:#0891b2;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;">Accept Invite</a>
+          </div>
+        </div>
+      </div>
+    `,
+  });
+
+  if (error) {
+    throw new Error(`Failed to send group invite email: ${error.message}`);
+  }
+
+  console.log(`[Mailer] Group invite email sent to: ${memberEmail}`, data ? `(ID: ${data.id})` : "");
+}
+
+export async function sendGroupExpenseAddedEmail(
+  memberEmail: string,
+  groupName: string,
+  expenseTitle: string,
+  amount: number,
+  addedByName: string
+): Promise<void> {
+  const formattedAmount = new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(amount);
+
+  const { data, error } = await getResend().emails.send({
+    from: FROM_ADDRESS,
+    to: memberEmail,
+    subject: `New expense in ${groupName}: ${expenseTitle}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+        <div style="background: linear-gradient(135deg, #0ea5e9 0%, #0f766e 100%); padding: 24px 32px; text-align: center;">
+          <h1 style="color:#ffffff;font-size:24px;font-weight:bold;margin:0;">Expense Added</h1>
+        </div>
+        <div style="padding: 28px 32px;">
+          <p style="margin: 0 0 12px; color: #334155;">${addedByName} added a new expense in <strong>${groupName}</strong>:</p>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 18px;">
+            <p style="margin:0 0 6px;color:#0f172a;font-weight:700;">${expenseTitle}</p>
+            <p style="margin:0;color:#0369a1;font-size:18px;font-weight:700;">${formattedAmount}</p>
+          </div>
+          <div style="text-align:center;margin-top:20px;">
+            <a href="${APP_URL}/expenses" style="display:inline-block;padding:12px 24px;background:#0891b2;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;">View Group</a>
+          </div>
+        </div>
+      </div>
+    `,
+  });
+
+  if (error) {
+    throw new Error(`Failed to send expense added email: ${error.message}`);
+  }
+
+  console.log(`[Mailer] Expense added email sent to: ${memberEmail}`, data ? `(ID: ${data.id})` : "");
+}
+
+export async function sendSettlementCompletedEmail(
+  memberEmail: string,
+  groupName: string,
+  amount: number,
+  fromName: string,
+  toName: string
+): Promise<void> {
+  const formattedAmount = new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(amount);
+
+  const { data, error } = await getResend().emails.send({
+    from: FROM_ADDRESS,
+    to: memberEmail,
+    subject: `Settlement completed in ${groupName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 24px 32px; text-align: center;">
+          <h1 style="color:#ffffff;font-size:24px;font-weight:bold;margin:0;">Settlement Completed</h1>
+        </div>
+        <div style="padding: 28px 32px;">
+          <p style="margin: 0 0 12px; color: #334155; line-height: 1.7;">
+            A payment of <strong>${formattedAmount}</strong> has been recorded in <strong>${groupName}</strong>.
+          </p>
+          <p style="margin: 0 0 16px; color: #0f172a;">${fromName} paid ${toName}.</p>
+          <div style="text-align:center;">
+            <a href="${APP_URL}/expenses" style="display:inline-block;padding:12px 24px;background:#0891b2;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;">Review Balances</a>
+          </div>
+        </div>
+      </div>
+    `,
+  });
+
+  if (error) {
+    throw new Error(`Failed to send settlement completed email: ${error.message}`);
+  }
+
+  console.log(`[Mailer] Settlement completed email sent to: ${memberEmail}`, data ? `(ID: ${data.id})` : "");
+}

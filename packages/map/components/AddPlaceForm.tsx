@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/packages/lib/toast";
 import type { Place } from "../types";
-import { FormPageViewSingleInputLayout } from "@/packages/components/shared/form/FormPageViewSingleInputLayout";
-import { FormPageViewTwoInputLayout } from "@/packages/components/shared/form/FormPageViewTwoInputLayout";
 
 interface AddPlaceFormProps {
   tripId: string;
@@ -12,7 +10,25 @@ interface AddPlaceFormProps {
   onMapClick?: () => void;
 }
 
-export function AddPlaceForm({ tripId, onPlaceAdded, onMapClick }: AddPlaceFormProps) {
+function toFiniteCoordinate(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const normalizedValue =
+    typeof value === "string"
+      ? value.trim().replace(",", ".")
+      : value;
+  const parsed = typeof normalizedValue === "number" ? normalizedValue : Number(normalizedValue);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isCoordinateInRange(lat: number, lng: number): boolean {
+  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+
+export function AddPlaceForm({ tripId, onPlaceAdded, }: AddPlaceFormProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -96,23 +112,48 @@ export function AddPlaceForm({ tripId, onPlaceAdded, onMapClick }: AddPlaceFormP
       return;
     }
 
+    if (!formData.address.trim()) {
+      toast.error("Please enter an address");
+      return;
+    }
+
+    if (!formData.time.trim()) {
+      toast.error("Please enter a visit time");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       // Submit to API - server will geocode if coordinates are missing
       const payload: Record<string, unknown> = {
         tripId,
-        name: formData.name,
+        name: formData.name.trim(),
         description: formData.description,
         category: formData.category,
-        address: formData.address,
-        time: formData.time,
+        address: formData.address.trim(),
+        time: formData.time.trim(),
       };
 
       // Only include coordinates if they exist
       if (formData.lat && formData.lng) {
-        payload.lat = parseFloat(formData.lat);
-        payload.lng = parseFloat(formData.lng);
+        const parsedLat = toFiniteCoordinate(formData.lat);
+        const parsedLng = toFiniteCoordinate(formData.lng);
+
+        if (parsedLat === null || parsedLng === null) {
+          toast.error("Please enter valid numeric coordinates");
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (!isCoordinateInRange(parsedLat, parsedLng)) {
+          toast.error("Latitude/longitude are out of valid range");
+          setIsSubmitting(false);
+          return;
+        }
+
+        payload.lat = parsedLat;
+        payload.lng = parsedLng;
       }
 
       const response = await fetch("/api/places", {
@@ -141,12 +182,21 @@ export function AddPlaceForm({ tripId, onPlaceAdded, onMapClick }: AddPlaceFormP
         return;
       }
 
+      const createdLat = toFiniteCoordinate(data?.place?.lat);
+      const createdLng = toFiniteCoordinate(data?.place?.lng);
+
+      if (createdLat === null || createdLng === null || !isCoordinateInRange(createdLat, createdLng)) {
+        toast.error("Place was created but returned invalid coordinates");
+        setIsOpen(false);
+        return;
+      }
+
       const newPlace: Place = {
         id: data.place.id,
         name: data.place.name,
         description: data.place.description || "",
-        lat: data.place.lat,
-        lng: data.place.lng,
+        lat: createdLat,
+        lng: createdLng,
         category: data.place.category,
         address: data.place.address,
         time: data.place.time,
@@ -176,10 +226,10 @@ export function AddPlaceForm({ tripId, onPlaceAdded, onMapClick }: AddPlaceFormP
 
   if (!isOpen) {
     return (
-      <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
+      <div className="border-b border-zinc-200 p-4 dark:border-zinc-800">
         <button
           onClick={() => setIsOpen(true)}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-primary/90"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -200,9 +250,17 @@ export function AddPlaceForm({ tripId, onPlaceAdded, onMapClick }: AddPlaceFormP
     );
   }
 
+  const fieldLabelClass = "mb-1.5 block text-xs font-medium text-zinc-700 dark:text-zinc-300";
+  const fieldInputClass = "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:border-zinc-700 dark:bg-zinc-900";
+  const isAddDisabled =
+    isSubmitting ||
+    !formData.name.trim() ||
+    !formData.address.trim() ||
+    !formData.time.trim();
+
   return (
-    <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
-      <div className="flex items-center justify-between mb-3">
+    <div className="border-b border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Add New Place</h3>
         <button
           onClick={() => setIsOpen(false)}
@@ -224,58 +282,59 @@ export function AddPlaceForm({ tripId, onPlaceAdded, onMapClick }: AddPlaceFormP
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <FormPageViewSingleInputLayout height="h-fit">
-          <div>
-            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 gap-3">
+          <div className="space-y-1.5">
+            <label className={fieldLabelClass}>
               Place Name *
             </label>
             <input
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              className={fieldInputClass}
               placeholder="e.g., Golden Temple"
               required
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+          <div className="space-y-1.5">
+            <label className={fieldLabelClass}>
               Description
             </label>
             <input
               type="text"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              className={fieldInputClass}
               placeholder="Brief description"
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-              Address
+          <div className="space-y-1.5">
+            <label className={fieldLabelClass}>
+              Address *
             </label>
             <div className="space-y-2">
               <input
                 type="text"
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                className={fieldInputClass}
                 placeholder="e.g., Patna Junction, Patna"
+                required
               />
               <button
                 type="button"
                 onClick={geocodeLocation}
                 disabled={isGeocoding || (!formData.name && !formData.address)}
-                className="w-full px-3 py-1.5 text-xs font-medium text-primary border border-primary rounded-lg hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex h-10 w-full items-center justify-center rounded-lg border border-primary px-3 text-xs font-medium text-primary transition-colors hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isGeocoding ? "Finding..." : "🔍 Find Coordinates"}
               </button>
             </div>
           </div>
-        </FormPageViewSingleInputLayout>
+        </div>
 
         {/* Manual Coordinates Section */}
         {showManualCoords && (
@@ -330,21 +389,21 @@ export function AddPlaceForm({ tripId, onPlaceAdded, onMapClick }: AddPlaceFormP
           <button
             type="button"
             onClick={() => setShowManualCoords(true)}
-            className="w-full px-3 py-1.5 text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:underline"
+            className="w-full px-3 py-1.5 text-center text-xs text-zinc-600 hover:underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
           >
             Enter coordinates manually
           </button>
         )}
 
-        <FormPageViewTwoInputLayout height="h-fit">
-          <div>
-            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label className={fieldLabelClass}>
               Category *
             </label>
             <select
               value={formData.category}
               onChange={(e) => setFormData({ ...formData, category: e.target.value as Place["category"] })}
-              className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              className={fieldInputClass}
               required
             >
               <option value="attraction">Attraction</option>
@@ -354,32 +413,33 @@ export function AddPlaceForm({ tripId, onPlaceAdded, onMapClick }: AddPlaceFormP
             </select>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-              Visit Time
+          <div className="space-y-1.5">
+            <label className={fieldLabelClass}>
+              Visit Time *
             </label>
             <input
               type="text"
               value={formData.time}
               onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-              className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              className={fieldInputClass}
               placeholder="e.g., 10:00 AM"
+              required
             />
           </div>
-        </FormPageViewTwoInputLayout>
+        </div>
 
-        <div className="flex gap-2 pt-2">
+        <div className="flex flex-col gap-2 pt-2 sm:flex-row">
           <button
             type="button"
             onClick={() => setIsOpen(false)}
-            className="flex-1 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
+            className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
           >
             Cancel
           </button>
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isAddDisabled}
+            className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSubmitting ? "Adding..." : "Add Place"}
           </button>
@@ -388,7 +448,7 @@ export function AddPlaceForm({ tripId, onPlaceAdded, onMapClick }: AddPlaceFormP
 
       <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
         <p className="text-xs text-blue-700 dark:text-blue-300">
-          💡 <strong>Tip:</strong> For best results, use simple addresses like "Patna Junction, Patna" instead of full detailed addresses
+          💡 <strong>Tip:</strong> For best results, use simple addresses like &quot;Patna Junction, Patna&quot; instead of full detailed addresses
         </p>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import dynamic from "next/dynamic";
 import Navbar from "@/packages/components/shared/Navbar";
+import ConfirmationModal from "@/packages/components/shared/ConfirmationModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/packages/components/ui/card";
 import { Button } from "@/packages/components/ui/button";
 import { Input } from "@/packages/components/ui/input";
@@ -28,6 +29,7 @@ type ApiTrip = {
   _id: string;
   title: string;
   source?: string;
+  destination?: string;
   startDate: string;
   endDate: string;
   places?: string[];
@@ -354,6 +356,8 @@ export default function ItineraryPage() {
   const [isLoadingItinerary, setIsLoadingItinerary] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [draggingSlot, setDraggingSlot] = useState<{ dayIndex: number; slotIndex: number } | null>(null);
   const skipNextAutoSaveRef = useRef(true);
   const lastSavedSignatureRef = useRef("");
@@ -380,7 +384,7 @@ export default function ItineraryPage() {
         const mapped: TripOption[] = apiTrips.map((trip) => ({
           id: String(trip._id),
           title: trip.title,
-          destination: trip.places?.[0] || trip.title,
+          destination: trip.destination || trip.places?.[1] || trip.places?.[0] || trip.title,
           startDate: trip.startDate,
           endDate: trip.endDate,
         }));
@@ -614,16 +618,21 @@ export default function ItineraryPage() {
     await saveItinerary("manual");
   };
 
-  const handleClear = async () => {
+  const openClearConfirmation = () => {
     if (!selectedTripId) {
       toast.error("No trip selected");
       return;
     }
 
-    if (!window.confirm("Are you sure you want to clear the current itinerary? This will delete all saved data.")) {
+    setIsClearModalOpen(true);
+  };
+
+  const handleClear = async () => {
+    if (!selectedTripId) {
       return;
     }
 
+    setIsClearing(true);
     try {
       const response = await fetch(`/api/trips/${selectedTripId}/itinerary`, {
         method: "DELETE",
@@ -637,10 +646,13 @@ export default function ItineraryPage() {
 
       setDayPlans([]);
       lastSavedSignatureRef.current = "";
+      setIsClearModalOpen(false);
       toast.success("Itinerary cleared successfully");
     } catch (error) {
       console.error("Clear itinerary error:", error);
       toast.error("Failed to clear itinerary");
+    } finally {
+      setIsClearing(false);
     }
   };
 
@@ -703,7 +715,7 @@ export default function ItineraryPage() {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.09),transparent_42%),linear-gradient(to_bottom,#f8fafc,#f1f5f9)] dark:bg-[radial-gradient(circle_at_top,rgba(8,145,178,0.18),transparent_35%),linear-gradient(to_bottom,#09090b,#0a0a0a)]">
       <Navbar />
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="w-full px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-14">
         <div className="mb-6">
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">{ITINERARY_LABELS.PAGE_TITLE}</h1>
           <p className="mt-2 text-zinc-600 dark:text-zinc-400">
@@ -711,7 +723,7 @@ export default function ItineraryPage() {
           </p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+        <div className="grid items-start gap-6 lg:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[420px_minmax(0,1fr)]">
           <Card className="h-fit border-zinc-200/80 bg-white/90 shadow-lg dark:border-zinc-800 dark:bg-zinc-900/85">
             <CardHeader>
               <CardTitle className="text-lg">Generator Inputs</CardTitle>
@@ -775,7 +787,7 @@ export default function ItineraryPage() {
                 <Button variant="outline" onClick={handleSave} disabled={isSaving || isAutoSaving || dayPlans.length === 0}>
                   {isSaving || isAutoSaving ? ITINERARY_LABELS.SAVING_BUTTON : ITINERARY_LABELS.SAVE_BUTTON}
                 </Button>
-                <Button variant="outline" onClick={handleClear} disabled={dayPlans.length === 0} className="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950">
+                <Button variant="outline" onClick={openClearConfirmation} disabled={dayPlans.length === 0} className="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950">
                   Clear
                 </Button>
               </div>
@@ -969,6 +981,16 @@ export default function ItineraryPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmationModal
+        open={isClearModalOpen}
+        onOpenChange={setIsClearModalOpen}
+        title="Clear Itinerary"
+        description="Are you sure you want to clear this itinerary? This will delete all saved day plans for the selected trip."
+        confirmLabel="Clear Itinerary"
+        onConfirm={handleClear}
+        isConfirming={isClearing}
+      />
     </div>
   );
 }

@@ -11,19 +11,19 @@ export function PlacesList({
 }: PlacesListProps) {
   return (
     <div className="h-full overflow-y-auto">
-      <div className="p-5">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">
+      <div className="p-4 sm:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3 sm:mb-5">
+          <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50 sm:text-xl">
             Trip Locations
           </h2>
-          <Badge variant="secondary">{places.length}</Badge>
+          <Badge variant="secondary" className="shrink-0">{places.length}</Badge>
         </div>
 
         <div className="space-y-3">
           {places.length === 0 ? (
-            <div className="text-center py-12">
+            <div className="py-10 text-center sm:py-12">
               <svg
-                className="w-16 h-16 mx-auto text-zinc-300 dark:text-zinc-600 mb-4"
+                className="mx-auto mb-4 h-14 w-14 text-zinc-300 dark:text-zinc-600 sm:h-16 sm:w-16"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -41,7 +41,7 @@ export function PlacesList({
                   d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                 />
               </svg>
-              <p className="text-zinc-600 dark:text-zinc-400 text-sm">
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
                 No places added yet
               </p>
             </div>

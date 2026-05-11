@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useEffectEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -28,6 +28,20 @@ interface Notification {
   time: string;
   isRead: boolean;
   link?: string;
+}
+
+interface NotificationApiItem {
+  id: string;
+  type: Notification["type"];
+  title: string;
+  message: string;
+  createdAt: string;
+  isRead: boolean;
+  link?: string | null;
+}
+
+interface NotificationsResponse {
+  notifications?: NotificationApiItem[];
 }
 
 function formatTimeAgo(date: string): string {
@@ -71,16 +85,8 @@ export default function Navbar() {
   const pathname = usePathname();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (isNotificationsOpen) {
-      loadNotifications();
-    }
-  }, [isNotificationsOpen]);
-
-  const loadNotifications = async () => {
-    setIsLoading(true);
+  const loadNotifications = useEffectEvent(async () => {
     try {
       const response = await fetch('/api/notifications?filter=unread', {
         cache: "no-store",
@@ -91,8 +97,8 @@ export default function Navbar() {
         return;
       }
 
-      const data = await response.json();
-      const formattedNotifications = data.notifications.slice(0, 5).map((notif: any) => ({
+      const data = (await response.json()) as NotificationsResponse;
+      const formattedNotifications = (data.notifications ?? []).slice(0, 5).map((notif) => ({
         id: notif.id,
         type: notif.type,
         title: notif.title,
@@ -106,10 +112,23 @@ export default function Navbar() {
     } catch (error) {
       console.error("Load notifications error:", error);
       setNotifications([]);
-    } finally {
-      setIsLoading(false);
     }
-  };
+  });
+
+  useEffect(() => {
+    loadNotifications();
+    const interval = window.setInterval(() => {
+      loadNotifications();
+    }, 30000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (isNotificationsOpen) {
+      loadNotifications();
+    }
+  }, [isNotificationsOpen]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
@@ -261,12 +280,12 @@ export default function Navbar() {
       transition={{ duration: 0.5, ease: "easeOut" }}
       className="backdrop-blur-md bg-white/70 dark:bg-zinc-900/70 sticky top-0 z-50 border-b border-zinc-200/50 dark:border-zinc-700/50"
     >
-      <div className="w-full mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
+      <div className="w-full mx-auto px-3 sm:px-6 lg:px-12 xl:px-16">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-3 group">
+          <Link href="/dashboard" className="flex items-center gap-2 sm:gap-3 group min-w-0">
             <motion.div
-              className="relative w-10 h-10"
+              className="relative h-8 w-8 sm:h-10 sm:w-10 shrink-0"
               whileHover={{ scale: 1.1, rotate: 5 }}
               whileTap={{ scale: 0.95 }}
               transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -280,7 +299,7 @@ export default function Navbar() {
               />
             </motion.div>
             <motion.h1
-              className="text-xl font-bold text-primary dark:text-primary"
+              className="truncate text-lg sm:text-xl font-bold text-primary dark:text-primary"
               whileHover={{ letterSpacing: "0.05em" }}
               transition={{ duration: 0.3 }}
             >
@@ -340,7 +359,7 @@ export default function Navbar() {
           </motion.div>
 
           {/* Right Section - Notifications & Auth */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             {/* Notifications */}
             <Popover open={isNotificationsOpen} onOpenChange={setIsNotificationsOpen}>
               <Tooltip>
@@ -411,12 +430,13 @@ export default function Navbar() {
                 </TooltipContent>
               </Tooltip>
 
-              <PopoverContent className="w-96 p-0" align="end" asChild>
+              <PopoverContent className="w-[calc(100vw-1rem)] max-w-sm p-0 sm:w-96" align="end" sideOffset={12} asChild>
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  initial={{ opacity: 0, scale: 0.96, y: -8 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                  transition={{ duration: 0.2 }}
+                  exit={{ opacity: 0, scale: 0.96, y: -8 }}
+                  transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.75 }}
+                  style={{ transformOrigin: "top right", willChange: "transform, opacity" }}
                   className="rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden"
                 >
                 {/* Header */}
@@ -624,12 +644,12 @@ export default function Navbar() {
 
       {/* Mobile Navigation */}
       <motion.div
-        className="md:hidden border-t border-zinc-200/50 dark:border-zinc-700/50 px-4 py-3 overflow-x-auto bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm"
+        className="md:hidden border-t border-zinc-200/50 dark:border-zinc-700/50 px-3 py-2 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm"
         initial={{ y: 50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.3, duration: 0.4 }}
       >
-        <div className="flex items-center gap-2 bg-zinc-100/80 dark:bg-zinc-800/80 rounded-full p-1">
+        <div className="grid grid-cols-5 items-center gap-1 rounded-2xl bg-zinc-100/80 p-1 dark:bg-zinc-800/80">
           {navLinks.map((link, index) => {
             const isActive = pathname === link.href;
             return (
@@ -642,8 +662,8 @@ export default function Navbar() {
                 <Link href={link.href}>
                   <motion.button
                     className={`
-                      px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap
-                      flex items-center gap-1.5
+                      w-full rounded-xl px-1 py-2 text-[11px] font-medium
+                      flex flex-col items-center justify-center gap-1
                       ${
                         isActive
                           ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-50 shadow-sm"
@@ -652,8 +672,8 @@ export default function Navbar() {
                     `}
                     whileTap={{ scale: 0.95 }}
                   >
-                    <span>{link.icon}</span>
-                    <span>{link.label}</span>
+                    <span className="flex h-4 w-4 items-center justify-center">{link.icon}</span>
+                    <span className="hidden min-[360px]:inline leading-none">{link.label}</span>
                   </motion.button>
                 </Link>
               </motion.div>

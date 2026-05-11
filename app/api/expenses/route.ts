@@ -101,17 +101,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const expense = await prisma.expense.create({
-      data: {
-        tripId,
-        title,
-        amount,
-        category,
-        paidBy: paidBy || session.user.name || "Unknown",
-        splitWith: Array.isArray(splitWith) ? splitWith : [],
-        date: date ? new Date(date) : new Date(),
-        notes: notes || "",
-      },
+    const expense = await prisma.$transaction(async (tx) => {
+      const createdExpense = await tx.expense.create({
+        data: {
+          tripId,
+          title,
+          amount,
+          category,
+          paidBy: paidBy || session.user.name || "Unknown",
+          splitWith: Array.isArray(splitWith) ? splitWith : [],
+          date: date ? new Date(date) : new Date(),
+          notes: notes || "",
+        },
+      });
+
+      const nextBudget = Math.max(0, Math.round((trip.budget - amount) * 100) / 100);
+      await tx.trip.update({
+        where: { id: tripId },
+        data: { budget: nextBudget },
+      });
+
+      return createdExpense;
     });
 
     // Send email notifications to members added to this expense (non-blocking)

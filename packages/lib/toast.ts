@@ -1,5 +1,15 @@
 import { toast as sonnerToast, ExternalToast } from "sonner";
 
+const SERVER_ERROR_MESSAGES = new Set([
+  "internal server error",
+  "something went wrong",
+  "something went wrong. try again",
+]);
+
+function isRetryableServerError(message: string) {
+  return SERVER_ERROR_MESSAGES.has(message.trim().toLowerCase());
+}
+
 /**
  * Enhanced toast utility with pre-configured success, error, info, and warning toasts
  * Built on top of Sonner for beautiful toast notifications
@@ -20,6 +30,17 @@ export const toast = {
    * Error toast with red X
    */
   error: (message: string, options?: ExternalToast) => {
+    if (isRetryableServerError(message)) {
+      return sonnerToast.error("Something went wrong. Try again", {
+        duration: 6000,
+        action: {
+          label: "Try again",
+          onClick: () => window.location.reload(),
+        },
+        ...options,
+      });
+    }
+
     return sonnerToast.error(message, {
       duration: 5000,
       ...options,
