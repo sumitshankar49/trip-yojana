@@ -20,6 +20,7 @@ type InviteRow = {
   status: string;
   group: {
     id: string;
+    ownerId: string;
     name: string;
     trip: {
       id: string;
