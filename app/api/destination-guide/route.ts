@@ -1288,6 +1288,7 @@ function dedupeByName(items: DiscoverItem[]): DiscoverItem[] {
   return unique;
 }
 
+
 function buildTips(city: string, attractionsCount: number, foodCount: number): string[] {
   return [
     `Start in central ${city} and group nearby places together to reduce transit time.`,
